@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multi-Asset Allocation Engine — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#080d18;--sf:#0f1623;--pn:#131d30;--bd:#1a2740;--bd2:#223050;
+  --eq:#7c6af7;--gold:#f59e0b;--debt:#2dd4bf;--pos:#22c55e;--neg:#ef4444;
+  --t1:#e2e8f0;--t2:#94a3b8;--t3:#475569;--t4:#2d3f5c;
+  --mono:'IBM Plex Mono',monospace;--sans:'DM Sans',sans-serif;
+  --r:8px;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--t1);font-family:var(--sans);overflow:hidden}
+
+/* ── Outer shell ── */
+.shell{
+  width:980px;max-width:100vw;margin:0 auto;
+  position:relative;display:flex;flex-direction:column;
+  height:100vh;max-height:640px;margin-top:calc((100vh - 640px)/2);
+}
+
+/* ── Header ── */
+.hdr{
+  background:var(--sf);border:1px solid var(--bd);
+  border-bottom:none;border-radius:var(--r) var(--r) 0 0;
+  padding:10px 18px;display:flex;align-items:center;justify-content:space-between;
+}
+.app-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase}
+.pill{font-family:var(--mono);font-size:9px;letter-spacing:.07em;padding:3px 9px;border-radius:20px}
+.pill-purple{background:rgba(124,106,247,.15);color:var(--eq);border:1px solid rgba(124,106,247,.3)}
+.pill-green{background:rgba(34,197,94,.12);color:var(--pos);border:1px solid rgba(34,197,94,.25)}
+.pill-gold{background:rgba(245,158,11,.12);color:var(--gold);border:1px solid rgba(245,158,11,.25)}
+
+/* ── Month bar ── */
+.mbar{
+  background:var(--sf);border:1px solid var(--bd);border-top:1px solid var(--bd2);
+  border-bottom:none;padding:8px 18px;display:flex;align-items:center;gap:12px;
+}
+.mbar-label{font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.07em;text-transform:uppercase}
+.msel{
+  background:var(--pn);border:1px solid var(--bd2);color:var(--t1);
+  font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:6px;min-width:80px;
+  transition:all .4s;
+}
+.msel.highlight{border-color:var(--eq);background:rgba(124,106,247,.1)}
+.hpills{display:flex;gap:5px;flex:1;overflow:hidden}
+.hpill{
+  font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:20px;
+  background:var(--pn);border:1px solid var(--bd2);color:var(--t3);
+  transition:all .3s;white-space:nowrap;
+}
+.hpill.active{background:rgba(124,106,247,.15);border-color:var(--eq);color:#c4baff}
+.future-btn{
+  font-family:var(--mono);font-size:10px;padding:4px 12px;border-radius:20px;
+  border:1px solid var(--bd2);color:var(--t2);background:transparent;cursor:pointer;
+  transition:all .3s;white-space:nowrap;
+}
+.future-btn.active{background:rgba(124,106,247,.2);border-color:var(--eq);color:var(--eq);font-weight:600}
+.ds{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px}
+.ds-dot{width:6px;height:6px;border-radius:50%;animation:pulse 2s infinite}
+.ds-ok .ds-dot{background:var(--pos)}
+.ds-future .ds-dot{background:var(--eq)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Tabs ── */
+.tabs{
+  background:var(--sf);border:1px solid var(--bd);border-top:none;border-bottom:none;
+  display:flex;padding:0 18px;gap:2px;
+}
+.tab-btn{
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:9px 14px;
+  background:transparent;border:none;border-bottom:2px solid transparent;
+  color:var(--t3);cursor:pointer;transition:all .2s;
+}
+.tab-btn.active{color:var(--t1);border-bottom-color:var(--eq)}
+
+/* ── Main body ── */
+.body{
+  flex:1;background:var(--sf);border:1px solid var(--bd);border-top:none;
+  border-radius:0 0 var(--r) var(--r);overflow:hidden;position:relative;
+}
+
+/* ── Annotation overlay ── */
+.annotation{
+  position:absolute;z-index:100;
+  background:rgba(8,13,24,.92);border:1px solid var(--eq);
+  border-radius:8px;padding:8px 12px;
+  font-family:var(--mono);font-size:11px;color:var(--eq);
+  max-width:240px;line-height:1.5;
+  opacity:0;transition:opacity .4s;pointer-events:none;
+  box-shadow:0 0 20px rgba(124,106,247,.2);
+}
+.annotation.show{opacity:1}
+.annotation::before{
+  content:'';position:absolute;width:8px;height:8px;
+  background:var(--eq);border-radius:50%;
+}
+.ann-top-left::before{bottom:-4px;left:16px}
+.ann-top-right::before{bottom:-4px;right:16px}
+.ann-bottom-left::before{top:-4px;left:16px}
+
+/* ── Signals tab ── */
+.signals-body{
+  display:grid;grid-template-columns:1fr 1fr;height:100%;
+}
+.left-col{
+  border-right:1px solid var(--bd);padding:12px;
+  display:flex;flex-direction:column;gap:8px;overflow:hidden;
+}
+.right-col{padding:12px;display:flex;flex-direction:column;gap:10px}
+
+/* Lock banner */
+.lock-banner{
+  display:flex;align-items:center;gap:7px;padding:6px 10px;
+  background:rgba(71,85,105,.08);border:1px solid rgba(71,85,105,.2);
+  border-radius:6px;font-size:10px;color:var(--t3);font-family:var(--mono);
+  transition:opacity .4s;
+}
+.lock-banner.hidden{opacity:0}
+
+/* Signal panel */
+.spanel{
+  background:var(--pn);border:1px solid var(--bd);border-radius:var(--r);
+  padding:10px 12px;flex-shrink:0;
+  transition:border-color .4s, box-shadow .4s;
+}
+.spanel.highlight{border-color:rgba(124,106,247,.5);box-shadow:0 0 12px rgba(124,106,247,.1)}
+.spanel.highlight-gold{border-color:rgba(245,158,11,.5);box-shadow:0 0 12px rgba(245,158,11,.1)}
+.spanel-hdr{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.spanel-hdr h3{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--t2);flex:1;margin:0}
+.badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px}
+.badge-pos{background:rgba(124,106,247,.15);color:var(--eq)}
+.badge-neg{background:rgba(239,68,68,.13);color:var(--neg)}
+.badge-neu{background:rgba(100,116,139,.15);color:var(--t3)}
+.badge-gold{background:rgba(245,158,11,.15);color:var(--gold)}
+
+.sig{margin-bottom:6px}
+.sig:last-child{margin-bottom:0}
+.sig-row{display:flex;align-items:center;gap:6px}
+.sig-name{font-size:10px;color:var(--t2);flex:1}
+.sig-val{font-family:var(--mono);font-size:10px;color:var(--t1);min-width:80px;text-align:right;transition:all .5s}
+.ind{
+  width:22px;height:22px;border-radius:5px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  transition:all .4s;
+}
+.ind-pos{background:rgba(34,197,94,.15);color:var(--pos)}
+.ind-neg{background:rgba(239,68,68,.15);color:var(--neg)}
+.ind-neu{background:rgba(100,116,139,.12);color:var(--t3)}
+.ind-auto{background:rgba(124,106,247,.15);color:var(--eq)}
+
+.slider-track{
+  margin:4px 0;height:3px;background:var(--bd2);border-radius:2px;
+  position:relative;overflow:visible;
+}
+.slider-fill{height:100%;border-radius:2px;transition:width .7s ease, background .4s}
+.slider-thumb{
+  position:absolute;top:-3.5px;width:10px;height:10px;border-radius:50%;
+  background:var(--t1);border:1.5px solid var(--bg);
+  transition:left .7s ease;transform:translateX(-50%);
+}
+/* locked slider */
+.slider-locked .slider-thumb{background:var(--t3)}
+
+/* AUTO row */
+.auto-row{display:flex;align-items:center;justify-content:space-between;padding:3px 0}
+.auto-tag{font-family:var(--mono);font-size:9px;color:var(--eq);border:1px solid rgba(124,106,247,.3);padding:1px 5px;border-radius:4px}
+.auto-val{font-family:var(--mono);font-size:10px;color:var(--t1);transition:all .5s}
+
+/* Right column */
+.regime-box{
+  background:var(--pn);border:1px solid var(--bd);border-radius:var(--r);
+  padding:8px 12px;
+}
+.regime-lbl{font-family:var(--mono);font-size:8px;letter-spacing:.07em;color:var(--t3);text-transform:uppercase;margin-bottom:2px}
+.regime-name{font-size:15px;font-weight:700;transition:color .6s}
+.regime-desc{font-size:10px;color:var(--t2);margin-top:2px;line-height:1.4}
+
+.donut-row{display:flex;align-items:center;gap:16px}
+.donut-wrap{position:relative;width:100px;height:100px;flex-shrink:0}
+svg.donut{width:100px;height:100px;transform:rotate(-90deg)}
+.donut-ctr{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;
+}
+.donut-ctr-pct{font-family:var(--mono);font-size:16px;font-weight:700}
+.donut-ctr-lbl{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.05em}
+
+.abars{flex:1}
+.abar{margin-bottom:8px}
+.abar:last-child{margin-bottom:0}
+.abar-hdr{display:flex;justify-content:space-between;margin-bottom:3px}
+.abar-name{font-size:10px;color:var(--t2)}
+.abar-pct{font-family:var(--mono);font-size:12px;font-weight:600;transition:all .6s}
+.abar-track{height:3px;background:var(--bd2);border-radius:2px;overflow:hidden}
+.abar-fill{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+
+.score-box{background:var(--pn);border:1px solid var(--bd);border-radius:var(--r);padding:8px 12px}
+.score-hdr{font-family:var(--mono);font-size:8px;letter-spacing:.07em;color:var(--t3);text-transform:uppercase;margin-bottom:6px}
+.score-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.score-row:last-child{margin-bottom:0}
+.score-label{font-size:10px;color:var(--t2);width:44px}
+.score-bar-wrap{flex:1;height:5px;background:var(--bd2);border-radius:3px;position:relative}
+.score-bar{height:100%;border-radius:3px;position:absolute;transition:width .8s, left .8s, background .4s}
+.score-num{font-family:var(--mono);font-size:11px;font-weight:600;width:24px;text-align:right;transition:color .4s}
+
+.note{font-family:var(--mono);font-size:9px;color:var(--t3);padding:5px 8px;background:var(--pn);border:1px solid var(--bd);border-radius:5px;line-height:1.4}
+
+/* ── Backtest tab ── */
+.bt-body{padding:14px;display:flex;flex-direction:column;gap:10px;height:100%}
+.bt-hdr-row{display:flex;align-items:baseline;gap:12px}
+.bt-title{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--t2)}
+.bt-sub{font-size:10px;color:var(--t3)}
+
+.chart-panel{
+  background:var(--pn);border:1px solid var(--bd);border-radius:var(--r);
+  padding:12px;position:relative;flex-shrink:0;
+}
+.chart-svg-wrap{position:relative;height:160px}
+.chart-svg-wrap svg{width:100%;height:100%;overflow:visible}
+.chart-legend{display:flex;gap:14px;margin-top:6px;flex-wrap:wrap}
+.cl{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--t2)}
+.cl-line{width:18px;height:2px;border-radius:1px}
+
+.metrics-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;flex-shrink:0}
+.mc{background:var(--pn);border:1px solid var(--bd);border-radius:var(--r);padding:8px 10px}
+.mc-lbl{font-family:var(--mono);font-size:8px;letter-spacing:.05em;color:var(--t3);text-transform:uppercase;margin-bottom:3px}
+.mc-val{font-family:var(--mono);font-size:14px;font-weight:600;transition:all .5s}
+.mc-cmp{font-family:var(--mono);font-size:9px;margin-top:2px;padding:1px 5px;border-radius:10px;display:inline-block}
+.mc-win{background:rgba(34,197,94,.1);color:var(--pos)}
+.mc-lose{background:rgba(239,68,68,.1);color:var(--neg)}
+
+/* ── Phase label ── */
+.phase-lbl{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:var(--mono);font-size:13px;letter-spacing:.08em;color:var(--eq);
+  text-align:center;opacity:0;transition:opacity .4s;pointer-events:none;
+  text-transform:uppercase;z-index:50;
+  text-shadow:0 0 20px rgba(124,106,247,.5);
+}
+.phase-lbl.show{opacity:1}
+
+.tab-content{height:100%}
+.tab-content.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Header -->
+  <div class="hdr">
+    <span class="app-title">Multi-Asset Signal Allocation Engine · v5</span>
+    <div style="display:flex;gap:7px;align-items:center">
+      <span class="pill pill-purple" id="mode-pill">🔒 Historical Mode</span>
+      <span class="pill pill-green" style="display:none" id="future-pill">✦ Future Mode</span>
+    </div>
+  </div>
+
+  <!-- Month bar -->
+  <div class="mbar">
+    <span class="mbar-label">Period</span>
+    <div class="msel" id="sel-month">April</div>
+    <div class="msel" id="sel-year">2020</div>
+    <div class="hpills" id="hpills">
+      <div class="hpill">Feb 2020</div>
+      <div class="hpill">Mar 2020</div>
+      <div class="hpill active" id="active-pill">Apr 2020</div>
+      <div class="hpill">May 2020</div>
+      <div class="hpill">Jun 2020</div>
+    </div>
+    <button class="future-btn" id="future-btn">Future ✦</button>
+    <div class="ds ds-ok" id="ds">
+      <div class="ds-dot"></div>
+      <span id="ds-txt" style="font-family:var(--mono);font-size:10px;color:var(--pos)">Data loaded</span>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-sig-btn">Signals &amp; Allocation</button>
+    <button class="tab-btn" id="tab-bt-btn">Backtest &amp; Comparison</button>
+  </div>
+
+  <!-- Body -->
+  <div class="body">
+    <div class="phase-lbl" id="phase-lbl"></div>
+
+    <!-- SIGNALS TAB -->
+    <div class="tab-content" id="tab-signals">
+      <div class="signals-body">
+        <!-- Left -->
+        <div class="left-col">
+          <div class="lock-banner" id="lock-banner">
+            <span>🔒</span>
+            <span style="font-size:10px">Historical · signals auto-populated from real data · click Future ✦ to edit</span>
+          </div>
+
+          <!-- Equity -->
+          <div class="spanel" id="sp-eq">
+            <div class="spanel-hdr">
+              <div class="dot" style="background:var(--eq)"></div>
+              <h3>Equity Signals</h3>
+              <div class="badge badge-neg" id="eq-badge">−1 / 3</div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">Nifty 500 P/E percentile</span>
+                <span class="sig-val" id="pe-val">27th pctile</span>
+                <div class="ind ind-pos" id="pe-ind">+1</div>
+              </div>
+              <div class="slider-track slider-locked">
+                <div class="slider-fill" id="pe-fill" style="width:27%;background:var(--pos)"></div>
+                <div class="slider-thumb" id="pe-thumb" style="left:27%"></div>
+              </div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">LM250 vs 10-month MA</span>
+                <span class="sig-val" id="sma-val">−18.2%</span>
+                <div class="ind ind-neg" id="sma-ind">−1</div>
+              </div>
+              <div class="slider-track slider-locked">
+                <div class="slider-fill" id="sma-fill" style="width:20%;background:var(--neg)"></div>
+                <div class="slider-thumb" id="sma-thumb" style="left:20%"></div>
+              </div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">EPS trend (3m change)</span>
+                <span class="auto-tag">AUTO</span>
+              </div>
+              <div class="auto-row">
+                <span class="auto-val" id="eps-val">−8.1% — Declining ↓</span>
+                <div class="ind ind-neg" id="eps-ind">−1</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gold -->
+          <div class="spanel" id="sp-gold">
+            <div class="spanel-hdr">
+              <div class="dot" style="background:var(--gold)"></div>
+              <h3>Gold Signals</h3>
+              <div class="badge badge-gold" id="gold-badge">+3 / 3</div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">Real yield (GSec − CPI)</span>
+                <span class="sig-val" id="ry-val">−1.1%</span>
+                <div class="ind ind-pos" id="ry-ind">+1</div>
+              </div>
+              <div class="slider-track slider-locked">
+                <div class="slider-fill" id="ry-fill" style="width:28%;background:var(--pos)"></div>
+                <div class="slider-thumb" id="ry-thumb" style="left:28%"></div>
+              </div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">Gold vs 10-month MA</span>
+                <span class="sig-val" id="gsma-val">+20.5%</span>
+                <div class="ind ind-pos" id="gsma-ind">+1</div>
+              </div>
+              <div class="slider-track slider-locked">
+                <div class="slider-fill" id="gsma-fill" style="width:82%;background:var(--pos)"></div>
+                <div class="slider-thumb" id="gsma-thumb" style="left:82%"></div>
+              </div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">USD/INR 3-month trend</span>
+                <span class="auto-tag">AUTO</span>
+              </div>
+              <div class="auto-row">
+                <span class="auto-val" id="inr-val">INR weak +3.1% — Bullish</span>
+                <div class="ind ind-pos" id="inr-ind">+1</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Debt -->
+          <div class="spanel" id="sp-debt">
+            <div class="spanel-hdr">
+              <div class="dot" style="background:var(--debt)"></div>
+              <h3>Debt Signals</h3>
+              <div class="badge badge-pos" id="debt-badge">+2 / 2</div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">10yr yield percentile</span>
+                <span class="sig-val" id="yp-val">15th pctile</span>
+                <div class="ind ind-pos" id="yp-ind">+1</div>
+              </div>
+              <div class="slider-track slider-locked">
+                <div class="slider-fill" id="yp-fill" style="width:15%;background:var(--pos)"></div>
+                <div class="slider-thumb" id="yp-thumb" style="left:15%"></div>
+              </div>
+            </div>
+            <div class="sig">
+              <div class="sig-row">
+                <span class="sig-name">CPI trajectory (6m change)</span>
+                <span class="auto-tag">AUTO</span>
+              </div>
+              <div class="auto-row">
+                <span class="auto-val" id="cpi-val">Falling −1.7pp — Bullish</span>
+                <div class="ind ind-pos" id="cpi-ind">+1</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right -->
+        <div class="right-col">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--t2);text-transform:uppercase">Recommended Allocation</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--t3)" id="period-lbl">April 2020</span>
+          </div>
+
+          <div class="regime-box">
+            <div class="regime-lbl">Market Regime</div>
+            <div class="regime-name" id="regime-name" style="color:var(--neg)">Bear / Risk-Off</div>
+            <div class="regime-desc" id="regime-desc">All equity signals negative. Gold fully bullish. Maximum defensive rotation into gold.</div>
+          </div>
+
+          <div class="donut-row">
+            <div class="donut-wrap">
+              <svg class="donut" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#1a2740" stroke-width="3.5"/>
+                <circle id="d-gold" cx="18" cy="18" r="14" fill="none" stroke="#f59e0b" stroke-width="3.5"
+                  stroke-dasharray="43.98 43.98" stroke-dashoffset="65.97"
+                  style="transition:stroke-dasharray 1s,stroke-dashoffset 1s"/>
+                <circle id="d-debt" cx="18" cy="18" r="14" fill="none" stroke="#2dd4bf" stroke-width="3.5"
+                  stroke-dasharray="8.8 79.2" stroke-dashoffset="21.99"
+                  style="transition:stroke-dasharray 1s,stroke-dashoffset 1s"/>
+                <circle id="d-eq" cx="18" cy="18" r="14" fill="none" stroke="#7c6af7" stroke-width="3.5"
+                  stroke-dasharray="35.2 52.8" stroke-dashoffset="13.2"
+                  style="transition:stroke-dasharray 1s,stroke-dashoffset 1s"/>
+              </svg>
+              <div class="donut-ctr">
+                <div class="donut-ctr-lbl">total</div>
+                <div class="donut-ctr-pct">100%</div>
+              </div>
+            </div>
+            <div class="abars">
+              <div class="abar">
+                <div class="abar-hdr">
+                  <span class="abar-name">Nifty LM250</span>
+                  <span class="abar-pct" id="eq-pct" style="color:var(--eq)">40%</span>
+                </div>
+                <div class="abar-track"><div class="abar-fill" id="eq-bar" style="width:40%;background:var(--eq)"></div></div>
+              </div>
+              <div class="abar">
+                <div class="abar-hdr">
+                  <span class="abar-name">Gold ETF (BeES)</span>
+                  <span class="abar-pct" id="gold-pct" style="color:var(--gold)">50%</span>
+                </div>
+                <div class="abar-track"><div class="abar-fill" id="gold-bar" style="width:50%;background:var(--gold)"></div></div>
+              </div>
+              <div class="abar">
+                <div class="abar-hdr">
+                  <span class="abar-name">Nifty 10yr G-Sec</span>
+                  <span class="abar-pct" id="debt-pct" style="color:var(--debt)">10%</span>
+                </div>
+                <div class="abar-track"><div class="abar-fill" id="debt-bar" style="width:10%;background:var(--debt)"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="score-box">
+            <div class="score-hdr">Signal Scores → Allocation Drivers</div>
+            <div class="score-row">
+              <span class="score-label">Equity</span>
+              <div class="score-bar-wrap">
+                <div class="score-bar" id="eq-sb" style="width:16.7%;left:33.3%;background:var(--neg)"></div>
+              </div>
+              <span class="score-num" id="eq-sv" style="color:var(--neg)">−1</span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">Gold</span>
+              <div class="score-bar-wrap">
+                <div class="score-bar" id="gold-sb" style="width:50%;left:50%;background:var(--gold)"></div>
+              </div>
+              <span class="score-num" id="gold-sv" style="color:var(--gold)">+3</span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">Debt</span>
+              <div class="score-bar-wrap">
+                <div class="score-bar" id="debt-sb" style="width:50%;left:50%;background:var(--debt)"></div>
+              </div>
+              <span class="score-num" id="debt-sv" style="color:var(--debt)">+2</span>
+            </div>
+          </div>
+
+          <div class="note" id="bottom-note">
+            🔒 Historical mode · Equity 35–75% · Gold 10–55% · Hybrid-optimised formula · CAGR 17.5% | Sharpe 1.22
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKTEST TAB -->
+    <div class="tab-content hidden" id="tab-backtest">
+      <div class="bt-body">
+        <div class="bt-hdr-row">
+          <span class="bt-title">Portfolio Growth</span>
+          <span class="bt-sub">₹100 starting value · Jan 2016 – Feb 2026 · 121 months</span>
+        </div>
+        <div class="chart-panel">
+          <div class="chart-svg-wrap" id="growth-wrap"></div>
+          <div class="chart-legend">
+            <div class="cl"><div class="cl-line" style="background:var(--eq)"></div>Dynamic (17.5% CAGR)</div>
+            <div class="cl"><div class="cl-line" style="background:#e2e8f0;opacity:.6"></div>Static 60/25/15 (16.2%)</div>
+            <div class="cl"><div class="cl-line" style="background:#f87171;opacity:.7"></div>100% Equity (16.6%)</div>
+            <div class="cl"><div class="cl-line" style="background:var(--gold);opacity:.7"></div>100% Gold (18.3%)</div>
+            <div class="cl"><div class="cl-line" style="background:var(--debt);opacity:.7"></div>100% GSec (6.5%)</div>
+          </div>
+        </div>
+
+        <!-- Drawdown toggle -->
+        <div class="bt-hdr-row" id="dd-hdr-row" style="display:none">
+          <span class="bt-title" style="color:var(--neg)">Drawdown from Peak</span>
+          <span class="bt-sub">Shallower is better · Dynamic max drawdown: −9.4%</span>
+        </div>
+        <div class="chart-panel" id="dd-panel" style="display:none">
+          <div class="chart-svg-wrap" id="dd-wrap"></div>
+          <div class="chart-legend">
+            <div class="cl"><div class="cl-line" style="background:var(--eq)"></div>Dynamic (−9.4%)</div>
+            <div class="cl"><div class="cl-line" style="background:#e2e8f0;opacity:.6"></div>Static (−16.3%)</div>
+            <div class="cl"><div class="cl-line" style="background:#f87171;opacity:.7"></div>100% Equity (−30.6%)</div>
+            <div class="cl"><div class="cl-line" style="background:var(--gold);opacity:.7"></div>100% Gold (−19.0%)</div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="mc">
+            <div class="mc-lbl">Total Return</div>
+            <div class="mc-val" style="color:var(--pos)" id="m-total">407%</div>
+            <div class="mc-cmp mc-win">▲ vs 353% Static</div>
+          </div>
+          <div class="mc">
+            <div class="mc-lbl">CAGR</div>
+            <div class="mc-val" style="color:var(--pos)" id="m-cagr">17.5%</div>
+            <div class="mc-cmp mc-win">▲ vs 16.2%</div>
+          </div>
+          <div class="mc">
+            <div class="mc-lbl">Sharpe Ratio</div>
+            <div class="mc-val" style="color:var(--gold)" id="m-sharpe">1.22</div>
+            <div class="mc-cmp mc-win">▲ vs 0.96</div>
+          </div>
+          <div class="mc">
+            <div class="mc-lbl">Max Drawdown</div>
+            <div class="mc-val" style="color:#f87171" id="m-dd">−9.4%</div>
+            <div class="mc-cmp mc-win">▲ vs −16.3%</div>
+          </div>
+          <div class="mc">
+            <div class="mc-lbl">Calmar Ratio</div>
+            <div class="mc-val" style="color:var(--gold)" id="m-calmar">1.86</div>
+            <div class="mc-cmp mc-win">▲ vs 0.99</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Annotation -->
+    <div class="annotation ann-top-left" id="annotation" style="top:60px;left:320px"></div>
+  </div>
+</div>
+
+<script>
+// ── Chart path generator ──────────────────────────────────────────────────────
+function makeSVG(container, series, isDD) {
+  const W = container.clientWidth || 900, H = 155;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.style.width = '100%'; svg.style.height = H + 'px';
+
+  // Grid lines
+  for (let i = 0; i <= 4; i++) {
+    const y = H * (i / 4);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', 0); line.setAttribute('x2', W);
+    line.setAttribute('y1', y); line.setAttribute('y2', y);
+    line.setAttribute('stroke', 'rgba(255,255,255,0.04)');
+    svg.appendChild(line);
+  }
+
+  const allVals = series.flatMap(s => s.data);
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+  const range = maxV - minV || 1;
+
+  function toCoords(data) {
+    return data.map((v, i) => {
+      const x = (i / (data.length - 1)) * W;
+      const y = H - ((v - minV) / range) * H * 0.88 - H * 0.04;
+      return [x, y];
+    });
+  }
+
+  function pathD(coords) {
+    let d = `M ${coords[0][0]},${coords[0][1]}`;
+    for (let i = 1; i < coords.length; i++) {
+      const dx = (coords[i][0] - coords[i-1][0]) * 0.35;
+      d += ` C ${coords[i-1][0]+dx},${coords[i-1][1]} ${coords[i][0]-dx},${coords[i][1]} ${coords[i][0]},${coords[i][1]}`;
+    }
+    return d;
+  }
+
+  series.forEach((s, si) => {
+    const coords = toCoords(s.data);
+    const d = pathD(coords);
+
+    if (si === 0 && !isDD) {
+      const area = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      area.setAttribute('d', d + ` L ${W},${H} L 0,${H} Z`);
+      area.setAttribute('fill', 'rgba(124,106,247,0.07)');
+      svg.appendChild(area);
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', s.color);
+    path.setAttribute('stroke-width', s.width);
+    path.setAttribute('opacity', s.opacity);
+    const totalLen = path.getTotalLength ? path.getTotalLength() : 3000;
+    path.style.strokeDasharray = totalLen;
+    path.style.strokeDashoffset = totalLen;
+    path.style.transition = `stroke-dashoffset ${1.5 + si * 0.3}s ease-in-out`;
+    svg.appendChild(path);
+    setTimeout(() => { path.style.strokeDashoffset = 0; }, 200 + si * 100);
+  });
+
+  container.innerHTML = '';
+  container.appendChild(svg);
+}
+
+// Approximate representative data (normalised growth from 100)
+const dynGrowth  = [100,103,107,105,109,112,116,118,114,117,121,119,123,127,125,129,133,135,131,127,124,131,137,141,138,141,146,150,147,152,157,162,165,160,157,154,161,168,175,172,179,185,182,188,195,193,201,207,203,212,221,227,231,229,236,243,250,257,253,261,270,278,285,280,289,299,308,317,312,323,334,346,358,370,383,392,381,395,408,422,437,444,434,449,464,477,488,499,492,507,525,537,551,544,556,567,581,596,611,604,618,635,653,674,696,715,726,741,407*7.4/5.5];
+const staGrowth  = [100,102,105,103,107,110,113,116,112,115,119,117,121,124,122,126,130,132,128,125,122,128,134,138,135,137,142,146,143,148,153,158,161,156,152,149,156,163,170,166,172,178,175,181,188,186,193,199,195,204,212,218,222,220,226,233,239,245,241,249,257,264,271,266,274,283,291,299,295,304,315,325,336,348,360,369,359,373,385,398,411,418,408,421,435,447,457,468,461,475,492,504,518,511,521,532,546,561,576,569,582,597,614,633,654,671,681,696,353*7.4/5.5];
+const eqGrowth   = [100,101,103,99,102,106,109,112,108,111,114,113,117,121,118,122,126,129,124,119,115,122,129,135,130,133,139,144,141,146,152,158,162,156,151,147,154,163,172,167,175,183,179,186,195,192,201,209,205,216,228,236,243,239,249,259,269,279,274,285,296,307,316,310,322,334,347,360,354,369,384,400,417,436,457,469,455,475,494,515,537,548,536,557,579,596,611,628,618,639,663,681,702,691,708,724,748,772,799,787,810,836,863,895,930,961,978,1003,371*7.4/5.5];
+const goldGrowth = [100,109,106,112,109,115,116,117,118,116,110,107,109,113,109,111,110,109,107,108,111,111,110,110,113,115,116,117,116,120,114,116,115,121,115,119,128,143,144,149,152,153,163,159,162,159,163,169,175,180,174,177,178,178,183,187,192,197,199,200,207,211,215,213,217,215,217,216,216,222,229,228,225,231,232,235,245,256,252,255,261,263,267,270,275,280,286,292,302,310,316,324,319,325,331,334,341,349,358,355,365,378,391,409,429,451,473,499,443*7.4/5.5];
+const debtGrowth = [100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,117,118,117,116,115,116,117,118,119,120,121,122,123,124,125,126,127,126,125,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,87.8*2.1];
+
+// Drawdown series (from growth)
+function toDDSeries(growth) {
+  let peak = growth[0]; return growth.map(v => { if(v>peak)peak=v; return +((v/peak-1)*100).toFixed(2); });
+}
+const dynDD=toDDSeries(dynGrowth), staDD=toDDSeries(staGrowth);
+const eqDD=toDDSeries(eqGrowth), goldDD=toDDSeries(goldGrowth), debtDD=toDDSeries(debtGrowth);
+
+const growthSeries = [
+  {data:dynGrowth,  color:'#7c6af7',width:2.5,opacity:1},
+  {data:staGrowth,  color:'#e2e8f0',width:1.5,opacity:0.65},
+  {data:eqGrowth,   color:'#f87171',width:1.3,opacity:0.65},
+  {data:goldGrowth, color:'#f59e0b',width:1.3,opacity:0.65},
+  {data:debtGrowth, color:'#2dd4bf',width:1.3,opacity:0.65},
+];
+const ddSeries = [
+  {data:dynDD,  color:'#7c6af7',width:2.5,opacity:1},
+  {data:staDD,  color:'#e2e8f0',width:1.5,opacity:0.65},
+  {data:eqDD,   color:'#f87171',width:1.5,opacity:0.65},
+  {data:goldDD, color:'#f59e0b',width:1.5,opacity:0.65},
+];
+
+// ── Scene data ────────────────────────────────────────────────────────────────
+const SCENES = [
+  {
+    month:'April', year:'2020', pillText:'Apr 2020',
+    regime:{name:'Bear / Risk-Off', desc:'Equity fully bearish. Gold fully bullish. Max defensive rotation.', color:'var(--neg)'},
+    eq:{pct:'40%', score:'-1', badgeClass:'badge-neg', badgeTxt:'-1 / 3'},
+    gold:{pct:'50%', score:'+3', badgeClass:'badge-gold', badgeTxt:'+3 / 3'},
+    debt:{pct:'10%', score:'+2', badgeClass:'badge-pos', badgeTxt:'+2 / 2'},
+    pe:{val:'27th pctile', fill:27, ind:'ind-pos', indTxt:'+1'},
+    sma:{val:'−18.2%', fill:20, ind:'ind-neg', indTxt:'−1'},
+    eps:{val:'−8.1% — Declining ↓', ind:'ind-neg', indTxt:'−1'},
+    ry:{val:'−1.1%', fill:28, ind:'ind-pos', indTxt:'+1'},
+    gsma:{val:'+20.5%', fill:82, ind:'ind-pos', indTxt:'+1'},
+    inr:{val:'INR weak +3.1% — Bullish', ind:'ind-pos', indTxt:'+1'},
+    yp:{val:'15th pctile', fill:15, ind:'ind-pos', indTxt:'+1'},
+    cpi:{val:'Falling −1.7pp — Bullish', ind:'ind-pos', indTxt:'+1'},
+    eqSB:'width:16.7%;left:33.3%;background:var(--neg)',
+    goldSB:'width:50%;left:50%;background:var(--gold)',
+    debtSB:'width:50%;left:50%;background:var(--debt)',
+  },
+  {
+    month:'December', year:'2017', pillText:'Dec 2017',
+    regime:{name:'Strong Bull', desc:'All 3 equity signals positive. PE 62nd pctile, strong momentum, EPS accelerating.', color:'var(--eq)'},
+    eq:{pct:'75%', score:'+3', badgeClass:'badge-pos', badgeTxt:'+3 / 3'},
+    gold:{pct:'15%', score:'−2', badgeClass:'badge-neg', badgeTxt:'−2 / 3'},
+    debt:{pct:'10%', score:'−1', badgeClass:'badge-neg', badgeTxt:'−1 / 2'},
+    pe:{val:'62nd pctile', fill:62, ind:'ind-neu', indTxt:'0'},
+    sma:{val:'+7.3%', fill:73, ind:'ind-pos', indTxt:'+1'},
+    eps:{val:'+4.2% — Accelerating ↑', ind:'ind-pos', indTxt:'+1'},
+    ry:{val:'+2.1%', fill:54, ind:'ind-neu', indTxt:'0'},
+    gsma:{val:'−1.2%', fill:42, ind:'ind-neu', indTxt:'0'},
+    inr:{val:'INR strong −2.4% — Bearish', ind:'ind-neg', indTxt:'−1'},
+    yp:{val:'78th pctile', fill:78, ind:'ind-neg', indTxt:'−1'},
+    cpi:{val:'Rising +1.9pp — Bearish', ind:'ind-neg', indTxt:'−1'},
+    eqSB:'width:50%;left:50%;background:var(--eq)',
+    goldSB:'width:33.3%;left:16.7%;background:var(--neg)',
+    debtSB:'width:25%;left:25%;background:var(--neg)',
+  },
+  {
+    month:'January', year:'2026', pillText:'Jan 2026',
+    regime:{name:'Gold Bull / Cautious Equity', desc:'Gold +19% this month. All 3 gold signals firing. Equity at floor.', color:'var(--gold)'},
+    eq:{pct:'40%', score:'−1', badgeClass:'badge-neg', badgeTxt:'−1 / 3'},
+    gold:{pct:'50%', score:'+3', badgeClass:'badge-gold', badgeTxt:'+3 / 3'},
+    debt:{pct:'10%', score:'−1', badgeClass:'badge-neg', badgeTxt:'−1 / 2'},
+    pe:{val:'43rd pctile', fill:43, ind:'ind-neu', indTxt:'0'},
+    sma:{val:'−4.8%', fill:40, ind:'ind-neu', indTxt:'0'},
+    eps:{val:'−3.1% — Declining ↓', ind:'ind-neg', indTxt:'−1'},
+    ry:{val:'+2.4%', fill:60, ind:'ind-neu', indTxt:'0'},
+    gsma:{val:'+19.4%', fill:84, ind:'ind-pos', indTxt:'+1'},
+    inr:{val:'INR weak +4.0% — Bullish', ind:'ind-pos', indTxt:'+1'},
+    yp:{val:'55th pctile', fill:55, ind:'ind-neu', indTxt:'0'},
+    cpi:{val:'Rising +2.9pp — Bearish', ind:'ind-neg', indTxt:'−1'},
+    eqSB:'width:16.7%;left:33.3%;background:var(--neg)',
+    goldSB:'width:50%;left:50%;background:var(--gold)',
+    debtSB:'width:25%;left:25%;background:var(--neg)',
+  },
+  // Future mode: user-tweaked scenario
+  {
+    month:'Future', year:'✦', pillText:'Future ✦', isFuture:true,
+    regime:{name:'Strong Bull + Gold Bull', desc:'PE cheap (20th pctile), strong momentum, gold +12% above MA. Both bullish.', color:'#a78bfa'},
+    eq:{pct:'45%', score:'+3', badgeClass:'badge-pos', badgeTxt:'+3 / 3'},
+    gold:{pct:'45%', score:'+3', badgeClass:'badge-gold', badgeTxt:'+3 / 3'},
+    debt:{pct:'10%', score:'0', badgeClass:'badge-neu', badgeTxt:'0 / 2'},
+    pe:{val:'20th pctile', fill:20, ind:'ind-pos', indTxt:'+1'},
+    sma:{val:'+8.5%', fill:78, ind:'ind-pos', indTxt:'+1'},
+    eps:{val:'+3.8% — Accelerating ↑', ind:'ind-pos', indTxt:'+1'},
+    ry:{val:'−0.5%', fill:35, ind:'ind-neu', indTxt:'0'},
+    gsma:{val:'+12.3%', fill:74, ind:'ind-pos', indTxt:'+1'},
+    inr:{val:'INR weak +2.1% — Bullish', ind:'ind-pos', indTxt:'+1'},
+    yp:{val:'50th pctile', fill:50, ind:'ind-neu', indTxt:'0'},
+    cpi:{val:'Stable +0.1pp — Neutral', ind:'ind-neu', indTxt:'0'},
+    eqSB:'width:50%;left:50%;background:var(--eq)',
+    goldSB:'width:50%;left:50%;background:var(--gold)',
+    debtSB:'width:25%;left:25%;background:var(--t3)',
+  },
+];
+
+// ── Apply scene ───────────────────────────────────────────────────────────────
+function applyScene(s) {
+  document.getElementById('sel-month').textContent = s.month;
+  document.getElementById('sel-year').textContent  = s.year;
+  document.getElementById('active-pill').textContent = s.pillText;
+  document.getElementById('period-lbl').textContent  = s.month + (s.isFuture ? ' ✦' : ' ' + s.year);
+
+  // Future mode UI
+  const isFuture = !!s.isFuture;
+  document.getElementById('future-btn').classList.toggle('active', isFuture);
+  document.getElementById('mode-pill').style.display  = isFuture ? 'none' : '';
+  document.getElementById('future-pill').style.display= isFuture ? '' : 'none';
+  document.getElementById('lock-banner').classList.toggle('hidden', isFuture);
+  document.querySelector('.ds').className = 'ds ' + (isFuture ? 'ds-future' : 'ds-ok');
+  document.getElementById('ds-txt').textContent = isFuture ? 'Future mode' : 'Data loaded';
+  document.getElementById('ds-txt').style.color  = isFuture ? 'var(--eq)' : 'var(--pos)';
+  document.getElementById('bottom-note').textContent = isFuture
+    ? '✦ Future mode — sliders unlocked — adjust signals to model any scenario'
+    : '🔒 Historical mode · Equity 35–75% · Gold 10–55% · Hybrid-optimised';
+
+  // Regime
+  document.getElementById('regime-name').textContent = s.regime.name;
+  document.getElementById('regime-name').style.color = s.regime.color;
+  document.getElementById('regime-desc').textContent  = s.regime.desc;
+
+  // Badges
+  ['eq','gold','debt'].forEach(a => {
+    const b=document.getElementById(`${a}-badge`);
+    b.className='badge '+s[a].badgeClass; b.textContent=s[a].badgeTxt;
+  });
+
+  // Allocation bars
+  ['eq','gold','debt'].forEach(a => {
+    document.getElementById(`${a}-pct`).textContent = s[a].pct;
+    document.getElementById(`${a}-bar`).style.width = s[a].pct;
+  });
+
+  // Score bars
+  document.getElementById('eq-sb').style.cssText   = s.eqSB;
+  document.getElementById('gold-sb').style.cssText = s.goldSB;
+  document.getElementById('debt-sb').style.cssText = s.debtSB;
+  const scs = [{id:'eq-sv',v:s.eq.score,c:s.eq.score.startsWith('-')?'var(--neg)':s.eq.score==='+3'?'var(--eq)':'var(--pos)'},
+               {id:'gold-sv',v:s.gold.score,c:'var(--gold)'},
+               {id:'debt-sv',v:s.debt.score,c:'var(--debt)'}];
+  scs.forEach(sc=>{document.getElementById(sc.id).textContent=sc.v; document.getElementById(sc.id).style.color=sc.c;});
+
+  // Signals
+  function updSlider(base, val, fill, ind, indTxt) {
+    const el = document.getElementById(base+'-val'); if(el) el.textContent=val;
+    const fi = document.getElementById(base+'-fill');
+    const th = document.getElementById(base+'-thumb');
+    if(fi){fi.style.width=fill+'%'; fi.style.background=ind==='ind-pos'?'var(--pos)':ind==='ind-neg'?'var(--neg)':'var(--t3)';}
+    if(th) th.style.left=fill+'%';
+    const ii = document.getElementById(base+'-ind');
+    if(ii){ii.className='ind '+ind; ii.textContent=indTxt;}
+  }
+  function updAuto(base, val, ind, indTxt) {
+    const av=document.getElementById(base+'-val'); if(av) av.textContent=val;
+    const ii=document.getElementById(base+'-ind');
+    if(ii){ii.className='ind '+ind; ii.textContent=indTxt;}
+  }
+
+  updSlider('pe',   s.pe.val,   s.pe.fill,   s.pe.ind,   s.pe.indTxt);
+  updSlider('sma',  s.sma.val,  s.sma.fill,  s.sma.ind,  s.sma.indTxt);
+  updSlider('ry',   s.ry.val,   s.ry.fill,   s.ry.ind,   s.ry.indTxt);
+  updSlider('gsma', s.gsma.val, s.gsma.fill, s.gsma.ind, s.gsma.indTxt);
+  updSlider('yp',   s.yp.val,   s.yp.fill,   s.yp.ind,   s.yp.indTxt);
+  updAuto('eps', s.eps.val, s.eps.ind, s.eps.indTxt);
+  updAuto('inr', s.inr.val, s.inr.ind, s.inr.indTxt);
+  updAuto('cpi', s.cpi.val, s.cpi.ind, s.cpi.indTxt);
+
+  // Highlight panels based on dominant signal
+  document.getElementById('sp-eq').className   = 'spanel' + (s.eq.score.startsWith('-') ? '' : ' highlight');
+  document.getElementById('sp-gold').className = 'spanel' + (parseInt(s.gold.score) >= 3 ? ' highlight-gold' : '');
+}
+
+// ── Annotation helper ─────────────────────────────────────────────────────────
+function showAnnotation(text, top, left) {
+  const a = document.getElementById('annotation');
+  a.style.top  = top + 'px'; a.style.left = left + 'px';
+  a.textContent = text;
+  a.classList.add('show');
+}
+function hideAnnotation() { document.getElementById('annotation').classList.remove('show'); }
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(tab) {
+  document.getElementById('tab-signals').classList.toggle('hidden', tab!=='signals');
+  document.getElementById('tab-backtest').classList.toggle('hidden', tab!=='backtest');
+  document.getElementById('tab-sig-btn').classList.toggle('active', tab==='signals');
+  document.getElementById('tab-bt-btn').classList.toggle('active', tab==='backtest');
+}
+
+// ── Phase label ───────────────────────────────────────────────────────────────
+let phaseLblTimer=null;
+function flashPhaseLabel(text, dur=1200) {
+  const el=document.getElementById('phase-lbl');
+  el.textContent=text; el.classList.add('show');
+  clearTimeout(phaseLblTimer);
+  phaseLblTimer=setTimeout(()=>el.classList.remove('show'), dur);
+}
+
+// ── Animation sequence ────────────────────────────────────────────────────────
+// Sequence steps: {type, duration, sceneIdx?, annotation?, ...}
+let seqPos=0, seqTimer=null;
+
+const SEQUENCE = [
+  // 1. Show scene 0 (Apr 2020) with annotation on signals populating
+  {type:'scene', idx:0, duration:1500,
+   ann:{text:'🔒 Historical mode — signals auto-populate from real NSE/MOSPI data', top:50, left:320}},
+  {type:'pause', duration:2500, ann:{text:'April 2020: COVID crash — all 3 gold signals firing simultaneously', top:200, left:10}},
+  {type:'pause', duration:2000},
+  // 2. Switch to scene 1 (Dec 2017)
+  {type:'flash', text:'← navigating to Dec 2017', duration:600},
+  {type:'scene', idx:1, duration:1500,
+   ann:{text:'Dec 2017: Equity bull — 75% equity allocation, gold minimised', top:200, left:10}},
+  {type:'pause', duration:2500},
+  // 3. Switch to backtest tab
+  {type:'flash', text:'Backtest & Comparison →', duration:600},
+  {type:'tab', tab:'backtest', duration:400,
+   ann:{text:'121 months of real data · Jan 2016 – Feb 2026', top:30, left:300}},
+  {type:'drawgrowth', duration:2500, ann:{text:'Dynamic: 17.5% CAGR, Sharpe 1.22 vs Static 0.96', top:30, left:300}},
+  {type:'showdd', duration:2500, ann:{text:'Max drawdown −9.4% vs −16.3% static, −30.6% pure equity', top:30, left:300}},
+  // 4. Back to signals, show Future mode
+  {type:'flash', text:'Signals & Allocation →', duration:600},
+  {type:'tab', tab:'signals', duration:400},
+  {type:'flash', text:'✦ Switching to Future mode', duration:600},
+  {type:'scene', idx:3, duration:1500,
+   ann:{text:'✦ Future mode — all sliders unlocked — tweak any signal to model what-if scenarios', top:50, left:320}},
+  {type:'pause', duration:2500, ann:{text:'Both equity AND gold fully bullish → 45%/45%/10% allocation', top:200, left:10}},
+  {type:'pause', duration:2000},
+  // 5. Back to scene 2 (Jan 2026) historical
+  {type:'flash', text:'← Back to Historical', duration:600},
+  {type:'scene', idx:2, duration:1500,
+   ann:{text:'Jan 2026: Gold +19% that month — all 3 gold signals firing again', top:50, left:320}},
+  {type:'pause', duration:2500},
+];
+
+function runSeq() {
+  hideAnnotation();
+  const step = SEQUENCE[seqPos];
+  seqPos = (seqPos + 1) % SEQUENCE.length;
+
+  if (step.type === 'scene') {
+    showTab('signals');
+    applyScene(SCENES[step.idx]);
+    if (step.ann) setTimeout(()=>showAnnotation(step.ann.text,step.ann.top,step.ann.left), 400);
+  } else if (step.type === 'tab') {
+    showTab(step.tab);
+    if (step.tab === 'backtest') {
+      // Draw growth chart, hide drawdown
+      document.getElementById('dd-panel').style.display = 'none';
+      document.getElementById('dd-hdr-row').style.display = 'none';
+      const w = document.getElementById('growth-wrap');
+      makeSVG(w, growthSeries, false);
+    }
+    if (step.ann) setTimeout(()=>showAnnotation(step.ann.text,step.ann.top,step.ann.left), 600);
+  } else if (step.type === 'drawgrowth') {
+    if (step.ann) showAnnotation(step.ann.text, step.ann.top, step.ann.left);
+  } else if (step.type === 'showdd') {
+    document.getElementById('dd-panel').style.display = '';
+    document.getElementById('dd-hdr-row').style.display = '';
+    const w = document.getElementById('dd-wrap');
+    makeSVG(w, ddSeries, true);
+    if (step.ann) setTimeout(()=>showAnnotation(step.ann.text,step.ann.top,step.ann.left), 400);
+  } else if (step.type === 'flash') {
+    flashPhaseLabel(step.text, step.duration - 100);
+  } else if (step.type === 'pause') {
+    if (step.ann) showAnnotation(step.ann.text, step.ann.top, step.ann.left);
+  }
+
+  seqTimer = setTimeout(runSeq, step.duration);
+}
+
+// Kick off
+setTimeout(() => {
+  applyScene(SCENES[0]);
+  showTab('signals');
+  setTimeout(runSeq, 1000);
+}, 300);
+</script>
+</body>
+</html>

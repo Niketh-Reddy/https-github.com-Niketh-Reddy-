@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Asset Allocation Engine v5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0e14;--surface:#131720;--s2:#1a2030;--s3:#1e2538;
+  --border:#242c3d;--border2:#2e3a50;
+  --eq:#7c6af7;--gold:#f5a623;--debt:#2dd4bf;
+  --pos:#22c55e;--neg:#ef4444;--neu:#64748b;
+  --text:#e2e8f0;--t2:#94a3b8;--t3:#475569;--t4:#334155;
+  --mono:'IBM Plex Mono',monospace;--sans:'DM Sans',sans-serif;
+  --r:8px;--rl:12px;
+}
+html{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5}
+body{min-height:100vh;padding:20px 16px 48px}
+
+/* ── Header ── */
+.hdr{text-align:center;margin-bottom:24px}
+.hdr .badge{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:3px 10px;border:1px solid var(--border2);border-radius:20px;color:var(--t3);margin-bottom:10px}
+.hdr h1{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:.04em;margin-bottom:5px}
+.hdr p{color:var(--t2);font-size:12px}
+
+/* ── Month bar ── */
+.mbar{max-width:1100px;margin:0 auto 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.mbar label{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);white-space:nowrap}
+.msel-wrap{display:flex;gap:8px}
+select.ms{background:var(--s2);border:1px solid var(--border2);color:var(--text);padding:7px 28px 7px 10px;border-radius:var(--r);font-family:var(--mono);font-size:13px;font-weight:500;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+.dstatus{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:var(--r);font-size:11px;font-family:var(--mono);font-weight:500;transition:all .3s;white-space:nowrap}
+.ds-ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--pos)}
+.ds-no{background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);color:var(--gold)}
+.sdot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.navbtns{display:flex;gap:6px;margin-left:auto}
+.nbtn{background:var(--s2);border:1px solid var(--border2);color:var(--t2);padding:6px 12px;border-radius:var(--r);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.nbtn:hover{background:var(--border2);color:var(--text)}
+
+/* ── History pills ── */
+.hstrip{max-width:1100px;margin:0 auto 16px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.hl{font-size:10px;font-family:var(--mono);color:var(--t3);letter-spacing:.05em;white-space:nowrap}
+.hpill{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--t3);cursor:pointer;transition:all .15s;white-space:nowrap}
+.hpill:hover{border-color:var(--eq);color:var(--eq)}
+.hpill.active{background:rgba(124,106,247,.15);border-color:var(--eq);color:var(--eq)}
+
+/* ── Tabs ── */
+.tabs{max-width:1100px;margin:0 auto 16px;display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:4px}
+.tab{flex:1;padding:9px 0;border:none;background:transparent;color:var(--t2);font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;border-radius:9px;transition:all .2s}
+.tab:hover{color:var(--text)}
+.tab.active{background:var(--s2);color:var(--text);border:1px solid var(--border2)}
+
+/* ── Layouts ── */
+.main{max-width:1100px;margin:0 auto;display:none}
+.main.visible{display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:14px}
+
+/* ── Panels ── */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.ph{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px}
+.ph .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ph h2{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--t2)}
+.ph .sbadge{margin-left:auto;font-family:var(--mono);font-size:12px;font-weight:600;padding:2px 9px;border-radius:6px;transition:all .3s}
+.pb{padding:18px}
+
+/* ── Signal rows ── */
+.sg{margin-bottom:18px}
+.sg:last-child{margin-bottom:0}
+.slrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.sln{font-size:12px;color:var(--t2)}
+.slsrc{font-size:10px;color:var(--t3);font-style:italic}
+.sigrow{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center}
+.iblk{display:flex;flex-direction:column;gap:4px}
+input[type=range]{width:100%;-webkit-appearance:none;height:3px;border-radius:2px;background:var(--border2);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--text);border:2px solid var(--surface);cursor:pointer;transition:transform .15s}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.2)}
+.trow{display:flex;justify-content:space-between;font-size:10px;color:var(--t3);font-family:var(--mono)}
+.vdisp{font-family:var(--mono);font-size:12px;font-weight:600;min-width:50px;text-align:right;color:var(--text)}
+.sind{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);font-size:11px;font-weight:600;transition:all .3s}
+.sp{background:rgba(34,197,94,.15);color:var(--pos)}
+.sn{background:rgba(100,116,139,.15);color:var(--neu)}
+.sb{background:rgba(239,68,68,.15);color:var(--neg)}
+select.isel{width:100%;background:var(--s2);border:1px solid var(--border2);color:var(--text);padding:7px 28px 7px 10px;border-radius:var(--r);font-family:var(--sans);font-size:12px;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' fill='none' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;padding-right:28px}
+
+/* Auto-computed indicator (read-only) */
+.auto-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);margin-top:6px}
+.auto-label{font-size:11px;color:var(--t2)}
+.auto-val{font-family:var(--mono);font-size:11px;color:var(--t3)}
+.auto-badge{font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px}
+.auto-tag{font-size:9px;font-family:var(--mono);color:var(--t4);background:var(--border);padding:1px 5px;border-radius:4px;margin-left:6px}
+
+/* ── Output panel ── */
+.regime-box{text-align:center;padding:16px 18px 12px}
+.rlabel{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-bottom:5px}
+.rname{font-family:var(--mono);font-size:17px;font-weight:600;transition:all .4s}
+.rdesc{font-size:11px;color:var(--t2);margin-top:3px}
+.rperiod{font-family:var(--mono);font-size:10px;color:var(--t3);margin-top:4px}
+.cwrap{position:relative;width:160px;height:160px;margin:0 auto 4px}
+.ccenter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.abars{padding:0 18px 16px}
+.ai{margin-bottom:10px}.ai:last-child{margin-bottom:0}
+.aitop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.ain{font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px}
+.ain::before{content:'';width:6px;height:6px;border-radius:2px;flex-shrink:0}
+.aeq::before{background:var(--eq)}.agold::before{background:var(--gold)}.adebt::before{background:var(--debt)}
+.apct{font-family:var(--mono);font-size:17px;font-weight:600;transition:all .4s}
+.atrack{height:4px;background:var(--border2);border-radius:2px;overflow:hidden}
+.afill{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.wnote{font-family:var(--mono);font-size:9px;color:var(--t3);text-align:center;padding:4px 18px 12px;line-height:1.6}
+
+/* Score bars */
+.scsec{padding:12px 18px;border-top:1px solid var(--border)}
+.scrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.scrow:last-child{margin-bottom:0}
+.scasset{font-size:11px;color:var(--t2);display:flex;align-items:center;gap:5px;min-width:60px}
+.sbwrap{flex:1;margin:0 10px;height:3px;background:var(--border2);border-radius:2px;overflow:visible;position:relative}
+.sbar{height:100%;border-radius:2px;position:absolute;top:0;transition:all .5s cubic-bezier(.4,0,.2,1)}
+.scval{font-family:var(--mono);font-size:11px;font-weight:500;min-width:28px;text-align:right}
+
+/* Signal table */
+.sigtbl{width:100%;border-collapse:collapse;font-size:11px}
+.sigtbl td{padding:5px 0}
+.sigtbl .tdn{color:var(--t2);display:flex;align-items:center;gap:5px}
+.sigtbl .tdv{text-align:right;font-family:var(--mono);color:var(--t3);padding-right:12px}
+.sigtbl .tds{text-align:right;font-family:var(--mono);font-weight:600}
+.grph td{padding-top:9px;padding-bottom:2px}
+.grl{font-size:9px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+
+/* ── No-data overlay ── */
+.prel{position:relative}
+.ndo{display:none;position:absolute;inset:0;background:rgba(12,14,20,.9);border-radius:var(--rl);z-index:10;flex-direction:column;align-items:center;justify-content:center;gap:7px;backdrop-filter:blur(3px)}
+.ndo.vis{display:flex}
+.ndo p{font-family:var(--mono);font-size:11px;color:var(--t3);text-align:center;line-height:1.8}
+
+/* ── Backtest Tab ── */
+.bt-grid{display:grid;grid-template-columns:1fr;gap:16px}
+.chart-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;padding:20px}
+.chart-title{font-family:var(--mono);font-size:11px;color:var(--t2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.chart-sub{font-size:11px;color:var(--t3);margin-bottom:16px}
+.chart-wrap{position:relative;width:100%;height:300px}
+.chart-legend{display:flex;gap:20px;margin-top:12px;flex-wrap:wrap}
+.cl-item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--t2)}
+.cl-line{width:24px;height:2px;border-radius:1px}
+.data-note{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:var(--r);margin-bottom:16px;font-size:11px;color:var(--gold);line-height:1.6}
+
+/* ── Metrics table ── */
+.mtpanel{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.mt-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px}
+.mttbl{width:100%;border-collapse:collapse}
+.mttbl th{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);padding:10px 20px;text-align:left;background:var(--s2);border-bottom:1px solid var(--border)}
+.mttbl th:nth-child(2),.mttbl th:nth-child(3){text-align:right}
+.mttbl td{padding:10px 20px;border-bottom:1px solid var(--border);font-size:12px;color:var(--t2)}
+.mttbl td:nth-child(2),.mttbl td:nth-child(3){text-align:right;font-family:var(--mono);font-weight:500}
+.mttbl tr:last-child td{border-bottom:none}
+.mttbl tr:hover td{background:var(--s2)}
+.mv{font-family:var(--mono);font-size:13px;font-weight:600}
+.mv.pos{color:var(--pos)}.mv.neg{color:var(--neg)}.mv.neu{color:var(--t2)}
+.better{color:var(--eq);font-weight:600}
+.winner-tag{font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:4px;margin-left:5px;vertical-align:middle}
+.wt-dyn{background:rgba(124,106,247,.15);color:var(--eq)}
+.wt-sta{background:rgba(100,116,139,.15);color:var(--neu)}
+.section-divider{height:1px;background:var(--border);margin:0}
+
+.disclaimer{max-width:1100px;margin:20px auto 0;padding:11px 16px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);display:flex;gap:9px}
+.disclaimer p{font-size:10px;color:var(--t3);line-height:1.6}
+
+/* Future mode button */
+.future-btn{background:transparent;border:1px solid var(--border2);color:var(--t2);padding:6px 13px;border-radius:var(--r);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .2s;white-space:nowrap;letter-spacing:.03em}
+.future-btn:hover{border-color:var(--eq);color:var(--eq)}
+.future-btn.active{background:rgba(124,106,247,.15);border-color:var(--eq);color:var(--eq);font-weight:600}
+
+/* Locked signal panels in historical mode */
+.signals-locked input[type=range]{pointer-events:none;opacity:0.45;cursor:not-allowed}
+.signals-locked input[type=range]::-webkit-slider-thumb{cursor:not-allowed}
+.signals-locked .slsrc::after{content:' · locked';color:var(--t4)}
+.lock-banner{display:none;align-items:center;gap:8px;padding:8px 14px;background:rgba(100,116,139,.08);border:1px solid rgba(100,116,139,.2);border-radius:var(--r);margin-bottom:12px;font-size:11px;color:var(--t3);font-family:var(--mono)}
+.lock-banner.visible{display:flex}
+.lock-icon{font-size:13px;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="badge">PASSIVE INDEX ALLOCATION ENGINE · v5</div>
+  <h1>Multi-Asset Signal Calculator</h1>
+  <p>7 raw inputs per month · EPS auto-computed from n500_close ÷ n500_pe · 8 signals total · Data: Jan 2016 – Feb 2026</p>
+</div>
+
+<!-- Month bar -->
+<div class="mbar">
+  <label>Period</label>
+  <div class="msel-wrap" id="msel-wrap">
+    <select class="ms" id="sel-month">
+      <option value="01">January</option><option value="02">February</option>
+      <option value="03">March</option><option value="04">April</option>
+      <option value="05">May</option><option value="06">June</option>
+      <option value="07">July</option><option value="08">August</option>
+      <option value="09">September</option><option value="10">October</option>
+      <option value="11">November</option><option value="12">December</option>
+    </select>
+    <select class="ms" id="sel-year"></select>
+  </div>
+  <button class="future-btn" id="future-btn" onclick="toggleFuture()" title="Switch to Future mode — manually adjust all signals">Future ✦</button>
+  <div class="dstatus ds-no" id="dstatus"><div class="sdot"></div><span id="dstatus-txt">No data</span></div>
+  <div class="navbtns">
+    <button class="nbtn" onclick="navMonth(-1)">← Prev</button>
+    <button class="nbtn" onclick="navMonth(1)">Next →</button>
+  </div>
+</div>
+
+<!-- History pills -->
+<div class="hstrip" id="hstrip"><span class="hl">Data available:</span></div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('signals',this)">Signals &amp; Allocation</button>
+  <button class="tab" onclick="switchTab('backtest',this)">Backtest &amp; Comparison</button>
+</div>
+
+<!-- ══════ TAB 1: SIGNALS ══════ -->
+<div class="main visible" id="tab-signals">
+<div class="lock-banner" id="lock-banner">
+  <span class="lock-icon">🔒</span>
+  <span>Historical mode — signals are auto-computed from real data and cannot be edited. Click <strong>Future ✦</strong> to enter what-if mode with editable signals.</span>
+</div>
+<div class="grid2" id="signals-grid">
+  <!-- LEFT: inputs -->
+  <div class="col">
+
+    <!-- Equity -->
+    <div class="panel">
+      <div class="ph"><div class="dot" style="background:var(--eq)"></div><h2>Equity signals</h2><div class="sbadge" id="eq-badge">—</div></div>
+      <div class="pb">
+        <div class="sg">
+          <div class="slrow"><span class="sln">Nifty 500 P/E percentile</span><span class="slsrc">auto-computed · NSE N500 factsheet</span></div>
+          <div class="sigrow">
+            <div class="iblk"><input type="range" id="pe-sl" min="0" max="100" value="55" oninput="update()"><div class="trow"><span>0th</span><span>50th</span><span>100th</span></div></div>
+            <div class="vdisp" id="pe-v">55th</div><div class="sind sn" id="pe-i">0</div>
+          </div>
+        </div>
+        <div class="sg">
+          <div class="slrow"><span class="sln">Nifty LM250 vs 10-month MA</span><span class="slsrc">auto-computed · uses n250_close</span></div>
+          <div class="sigrow">
+            <div class="iblk"><input type="range" id="sma-sl" min="-30" max="30" value="3" oninput="update()"><div class="trow"><span>-30%</span><span>0%</span><span>+30%</span></div></div>
+            <div class="vdisp" id="sma-v">+3%</div><div class="sind sn" id="sma-i">0</div>
+          </div>
+        </div>
+        <div class="sg" style="margin-bottom:0">
+          <div class="slrow"><span class="sln">Nifty 500 EPS trend (3m change)</span><span class="slsrc">auto-computed · n500_close ÷ n500_pe</span></div>
+          <div class="auto-row">
+            <div><span class="auto-label">EPS momentum</span><span class="auto-tag">AUTO</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="auto-val" id="eps-auto-val">—</span><div class="sind sn" id="eps-i" style="width:28px;height:28px">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gold -->
+    <div class="panel">
+      <div class="ph"><div class="dot" style="background:var(--gold)"></div><h2>Gold signals</h2><div class="sbadge" id="gold-badge">—</div></div>
+      <div class="pb">
+        <div class="sg">
+          <div class="slrow"><span class="sln">Real yield (10yr GSec − CPI)</span><span class="slsrc">auto-computed · bearish &gt;4%, bullish &lt;-1%</span></div>
+          <div class="sigrow">
+            <div class="iblk"><input type="range" id="ry-sl" min="-3" max="5" step="0.1" value="1.2" oninput="update()"><div class="trow"><span>-3%</span><span>0%</span><span>+5%</span></div></div>
+            <div class="vdisp" id="ry-v">1.2%</div><div class="sind sn" id="ry-i">0</div>
+          </div>
+        </div>
+        <div class="sg">
+          <div class="slrow"><span class="sln">Gold MCX vs 10-month MA</span><span class="slsrc">auto-computed from gold_nav history</span></div>
+          <div class="sigrow">
+            <div class="iblk"><input type="range" id="gsma-sl" min="-20" max="30" value="4" oninput="update()"><div class="trow"><span>-20%</span><span>0%</span><span>+30%</span></div></div>
+            <div class="vdisp" id="gsma-v">+4%</div><div class="sind sn" id="gsma-i">0</div>
+          </div>
+        </div>
+        <div class="sg" style="margin-bottom:0">
+          <div class="slrow"><span class="sln">USD/INR 3-month trend</span><span class="slsrc">auto-computed</span></div>
+          <div class="auto-row">
+            <div><span class="auto-label">Rupee direction</span><span class="auto-tag">AUTO</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="auto-val" id="inr-auto-val">—</span><div class="sind sn" id="inr-i" style="width:28px;height:28px">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debt -->
+    <div class="panel">
+      <div class="ph"><div class="dot" style="background:var(--debt)"></div><h2>Debt signals</h2><div class="sbadge" id="debt-badge">—</div></div>
+      <div class="pb">
+        <div class="sg">
+          <div class="slrow"><span class="sln">10yr GSec yield percentile (5yr)</span><span class="slsrc">auto-computed from yield history</span></div>
+          <div class="sigrow">
+            <div class="iblk"><input type="range" id="yp-sl" min="0" max="100" value="60" oninput="update()"><div class="trow"><span>0th (low yield)</span><span>50th</span><span>100th (high)</span></div></div>
+            <div class="vdisp" id="yp-v">60th</div><div class="sind sn" id="yp-i">0</div>
+          </div>
+        </div>
+        <div class="sg" style="margin-bottom:0">
+          <div class="slrow"><span class="sln">CPI trajectory (6-month change)</span><span class="slsrc">auto-computed — replaces RBI stance</span></div>
+          <div class="auto-row">
+            <div><span class="auto-label">Inflation trend</span><span class="auto-tag">AUTO</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span class="auto-val" id="cpi-auto-val">—</span><div class="sind sn" id="cpi-i" style="width:28px;height:28px">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end left col -->
+
+  <!-- RIGHT: outputs -->
+  <div class="col">
+    <!-- Allocation panel -->
+    <div class="panel prel" id="alloc-panel">
+      <div class="ndo" id="ndo"><div style="font-size:24px;opacity:.4">📭</div><p>No data for this month yet.<br>Add data to the DATA store to populate<br>signals and allocation.</p></div>
+      <div class="ph"><div class="dot" style="background:#f8fafc"></div><h2>Recommended allocation</h2><div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--t3)" id="out-period">—</div></div>
+      <div class="regime-box">
+        <div class="rlabel">Market regime</div>
+        <div class="rname" id="regime-name">—</div>
+        <div class="rdesc" id="regime-desc">Select a month with data</div>
+      </div>
+      <div class="cwrap"><canvas id="allocChart"></canvas>
+        <div class="ccenter"><div style="font-family:var(--mono);font-size:9px;color:var(--t2)">total</div><div style="font-family:var(--mono);font-size:14px;font-weight:600">100%</div></div>
+      </div>
+      <div class="abars">
+        <div class="ai"><div class="aitop"><div class="ain aeq">Nifty LargeMidcap 250</div><div class="apct" id="eq-pct" style="color:var(--eq)">—</div></div><div class="atrack"><div class="afill" id="eq-bar" style="background:var(--eq);width:0%"></div></div></div>
+        <div class="ai" style="margin-top:9px"><div class="aitop"><div class="ain agold">Gold ETF</div><div class="apct" id="gold-pct" style="color:var(--gold)">—</div></div><div class="atrack"><div class="afill" id="gold-bar" style="background:var(--gold);width:0%"></div></div></div>
+        <div class="ai" style="margin-top:9px"><div class="aitop"><div class="ain adebt">Nifty 10yr G-Sec Index</div><div class="apct" id="debt-pct" style="color:var(--debt)">—</div></div><div class="atrack"><div class="afill" id="debt-bar" style="background:var(--debt);width:0%"></div></div></div>
+      </div>
+      <div class="wnote">Equity 35–75% · Gold 10–55% · Debt residual · Hybrid optimised formula · CAGR 17.5% | Sharpe 1.22</div>
+    </div>
+
+    <!-- Scores + Signal table -->
+    <div class="panel">
+      <div class="ph"><div class="dot" style="background:var(--t3)"></div><h2>Signal scores</h2></div>
+      <div class="scsec">
+        <div class="scrow"><div class="scasset"><div class="dot" style="background:var(--eq)"></div>Equity</div><div class="sbwrap"><div class="sbar" id="eq-sb"></div></div><div class="scval" id="eq-sv" style="color:var(--eq)">—</div></div>
+        <div class="scrow" style="margin-top:7px"><div class="scasset"><div class="dot" style="background:var(--gold)"></div>Gold</div><div class="sbwrap"><div class="sbar" id="gold-sb"></div></div><div class="scval" id="gold-sv" style="color:var(--gold)">—</div></div>
+        <div class="scrow" style="margin-top:7px"><div class="scasset"><div class="dot" style="background:var(--debt)"></div>Debt</div><div class="sbwrap"><div class="sbar" id="debt-sb"></div></div><div class="scval" id="debt-sv" style="color:var(--debt)">—</div></div>
+      </div>
+      <div class="ph" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><div class="dot" style="background:var(--t3)"></div><h2>Signal breakdown</h2></div>
+      <div style="padding:10px 18px"><table class="sigtbl"><tbody id="sig-tbl"></tbody></table></div>
+      <div style="padding:0 18px 16px">
+        <div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:10px 13px">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Rebalance note</div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.7" id="rebal-note">Rebalance when drift &gt; 5% from target.</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end right col -->
+</div><!-- end grid -->
+</div><!-- end tab-signals -->
+
+<!-- ══════ TAB 2: BACKTEST ══════ -->
+<div class="main" id="tab-backtest">
+  <div class="data-note" style="background:rgba(45,212,191,.06);border-color:rgba(45,212,191,.2);color:var(--debt)">
+    ✓ Real data: Jan 2016 – Feb 2026 · 122 months · Nifty 10yr Benchmark G-Sec Index · All series complete.
+  </div>
+  <div class="bt-grid">
+    <!-- Chart -->
+    <div class="chart-panel">
+      <div class="chart-title">Portfolio growth</div>
+      <div class="chart-sub">₹100 starting value · Monthly rebalancing · 5 series: Dynamic, Static, 100% Equity, 100% Gold, 100% GSec</div>
+      <div class="chart-wrap"><canvas id="btChart"></canvas></div>
+      <div class="chart-legend">
+        <div class="cl-item"><div class="cl-line" style="background:#7c6af7;height:2.5px"></div>Dynamic (signal-driven)</div>
+        <div class="cl-item"><div class="cl-line" style="background:#e2e8f0;height:2px"></div>Static 60/25/15</div>
+        <div class="cl-item"><div class="cl-line" style="background:#f87171;height:2px"></div>100% Equity (N250)</div>
+        <div class="cl-item"><div class="cl-line" style="background:#fbbf24;height:2px"></div>100% Gold</div>
+        <div class="cl-item"><div class="cl-line" style="background:#2dd4bf;height:2px"></div>100% GSec</div>
+      </div>
+    </div>
+    <!-- Metrics -->
+    <div class="mtpanel">
+      <div class="mt-header"><div class="dot" style="background:var(--t3)"></div><h2 style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--t2)">Performance comparison</h2></div>
+      <table class="mttbl" id="metrics-tbl">
+        <thead><tr>
+          <th style="text-align:left">Metric</th>
+          <th style="text-align:right">Dynamic</th>
+          <th style="text-align:right">Static 60/25/15</th>
+          <th style="text-align:right">100% Equity</th>
+          <th style="text-align:right">100% Gold</th>
+          <th style="text-align:right">100% GSec</th>
+        </tr></thead>
+        <tbody id="metrics-body"></tbody>
+      </table>
+    </div>
+    <!-- Drawdown chart -->
+    <div class="chart-panel">
+      <div class="chart-title">Drawdown from peak</div>
+      <div class="chart-sub">Monthly drawdown % for each strategy — shallower = better capital preservation</div>
+      <div class="chart-wrap" style="height:260px"><canvas id="ddChart"></canvas></div>
+      <div class="chart-legend">
+        <div class="cl-item"><div class="cl-line" style="background:#7c6af7;height:2.5px"></div>Dynamic</div>
+        <div class="cl-item"><div class="cl-line" style="background:#e2e8f0;height:2px"></div>Static 60/25/15</div>
+        <div class="cl-item"><div class="cl-line" style="background:#f87171;height:2px"></div>100% Equity</div>
+        <div class="cl-item"><div class="cl-line" style="background:#fbbf24;height:2px"></div>100% Gold</div>
+        <div class="cl-item"><div class="cl-line" style="background:#2dd4bf;height:2px"></div>100% GSec</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="disclaimer">
+  <div style="font-size:13px;flex-shrink:0;margin-top:1px">⚠</div>
+  <p>For educational purposes only. Not financial advice. Signal-to-return relationships are not guaranteed. Each rebalance across funds triggers capital gains tax events. The backtest uses illustrative sample data — replace with verified index return data for meaningful results. Past performance is not indicative of future returns. Consult a SEBI-registered investment advisor before making allocation decisions. Mutual Fund investments are subject to market risks.</p>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  DATA STORE  —  key format: "YYYY-MM"
+//
+//  RAW INPUTS you collect monthly (7 fields, ~15 min/month):
+//
+//  EQUITY
+//    n500_pe    — Nifty 500 trailing P/E           → NSE N500 factsheet PDF
+//    n500_close — Nifty 500 index closing level     → NSE (same factsheet or historical data)
+//    n250_close — Nifty LM250 TRI closing level     → NSE indices historical data
+//
+//  MACRO / GOLD / DEBT
+//    gsec_10yr  — 10yr G-Sec benchmark yield %      → investing.com or RBI DBIE (end-of-month value)
+//    cpi        — CPI inflation % (YoY, combined)   → MOSPI (mospi.gov.in)
+//    gold_nav   — Nippon Gold BeES NAV end-of-month   → investing.com
+//    usdinr     — USD/INR end-of-month              → RBI reference rate
+//
+//  RETURNS (backtest tab only — 3 additional fields)
+//    n250_ret   — Nifty LM250 TRI monthly return %  → NSE indices historical data
+//    gold_ret   — MCX Gold monthly return %          → MCX India
+//    gsec_ret   — Nifty 10yr G-Sec TRI monthly %    → NSE indices historical data
+//
+//  AUTO-COMPUTED (zero manual work — tool derives all of these):
+//    • n500_eps             = n500_close ÷ n500_pe   (no separate input needed)
+//    • P/E percentile       vs full dataset history
+//    • LM250 vs 10m MA      from n250_close rolling average
+//    • EPS 3m trend         from n500_eps 3-month change
+//    • Real yield           = gsec_10yr − cpi
+//    • Gold vs 10m MA       from gold_nav rolling average
+//    • USD/INR 3m direction from usdinr 3-month change
+//    • Yield percentile     vs full dataset history
+//    • CPI 6m trajectory    from cpi 6-month change
+// ══════════════════════════════════════════════════════════════════════════════
+const DATA = {
+  // ── REAL DATA Jan 2016 – Dec 2025 — ALL FIELDS COMPLETE ─────────────────
+  // n500_pe    = Nifty 500 P/E end-of-month          (NSE PE/PB/Div files)
+  // n500_close = Nifty 500 PR index close             (NSE historical data)
+  // n250_close = Nifty LM250 TRI close                (NSE historical data)
+  // gsec_10yr  = India 10yr bond yield %              (investing.com)
+  // cpi        = CPI YoY % (MOSPI, from index levels) (MOSPI CSV)
+  // gold_nav   = Nippon Gold BeES NAV end-of-month    (investing.com)
+  // usdinr     = USD/INR end-of-month                 (investing.com)
+  // n250_ret   = Nifty LM250 TRI monthly return %     (auto-computed)
+  // gold_ret   = Gold BeES NAV monthly return %        (auto-computed)
+  // gsec_ret   = Nifty 10yr Benchmark G-Sec PR return %(NSE historical data)
+  "2016-01":{ n500_pe:22.08, n500_close:6339.45, n250_close:4534.97, gsec_10yr:7.779, cpi:5.69, gold_nav:24.23, usdinr:67.8680 },
+  "2016-02":{ n500_pe:20.64, n500_close:5829.95, n250_close:4149.62, gsec_10yr:7.623, cpi:5.26, gold_nav:26.49, usdinr:68.1980, n250_ret:-8.50, gold_ret:9.33, gsec_ret:0.98 },
+  "2016-03":{ n500_pe:22.81, n500_close:6452.15, n250_close:4613.85, gsec_10yr:7.459, cpi:4.83, gold_nav:25.64, usdinr:66.2500, n250_ret:11.19, gold_ret:-3.21, gsec_ret:1.74 },
+  "2016-04":{ n500_pe:23.16, n500_close:6588.55, n250_close:4733.20, gsec_10yr:7.435, cpi:5.47, gold_nav:27.17, usdinr:66.4150, n250_ret:2.59, gold_ret:5.97, gsec_ret:0.75 },
+  "2016-05":{ n500_pe:24.97, n500_close:6804.00, n250_close:4872.12, gsec_10yr:7.471, cpi:5.76, gold_nav:26.46, usdinr:67.1990, n250_ret:2.94, gold_ret:-2.61, gsec_ret:0.39 },
+  "2016-06":{ n500_pe:25.89, n500_close:6980.80, n250_close:5035.12, gsec_10yr:7.448, cpi:5.77, gold_nav:27.77, usdinr:67.4930, n250_ret:3.35, gold_ret:4.95, gsec_ret:0.76 },
+  "2016-07":{ n500_pe:27.16, n500_close:7330.00, n250_close:5304.32, gsec_10yr:7.163, cpi:6.07, gold_nav:27.96, usdinr:66.6300, n250_ret:5.35, gold_ret:0.68, gsec_ret:2.51 },
+  "2016-08":{ n500_pe:28.23, n500_close:7490.65, n250_close:5475.04, gsec_10yr:7.110, cpi:5.05, gold_nav:28.12, usdinr:66.9630, n250_ret:3.22, gold_ret:0.57, gsec_ret:0.96 },
+  "2016-09":{ n500_pe:27.49, n500_close:7394.85, n250_close:5450.56, gsec_10yr:6.958, cpi:4.39, gold_nav:28.25, usdinr:66.5460, n250_ret:-0.45, gold_ret:0.46, gsec_ret:1.58 },
+  "2016-10":{ n500_pe:27.57, n500_close:7501.45, n250_close:5583.92, gsec_10yr:6.885, cpi:4.20, gold_nav:27.84, usdinr:66.6750, n250_ret:2.45, gold_ret:-1.45, gsec_ret:0.90 },
+  "2016-11":{ n500_pe:25.09, n500_close:7079.40, n250_close:5225.61, gsec_10yr:6.243, cpi:3.63, gold_nav:26.46, usdinr:68.5880, n250_ret:-6.42, gold_ret:-4.96, gsec_ret:4.48 },
+  "2016-12":{ n500_pe:25.30, n500_close:6982.80, n250_close:5120.35, gsec_10yr:6.512, cpi:3.41, gold_nav:25.65, usdinr:67.9450, n250_ret:-2.01, gold_ret:-3.06, gsec_ret:-1.34 },
+  "2017-01":{ n500_pe:26.57, n500_close:7379.30, n250_close:5437.61, gsec_10yr:6.407, cpi:3.17, gold_nav:26.31, usdinr:67.4900, n250_ret:6.20, gold_ret:2.57, gsec_ret:1.27 },
+  "2017-02":{ n500_pe:26.57, n500_close:7709.10, n250_close:5735.25, gsec_10yr:6.870, cpi:3.65, gold_nav:27.02, usdinr:66.7000, n250_ret:5.47, gold_ret:2.70, gsec_ret:-2.54 },
+  "2017-03":{ n500_pe:26.82, n500_close:7995.05, n250_close:5991.47, gsec_10yr:6.658, cpi:3.89, gold_nav:26.13, usdinr:64.8500, n250_ret:4.47, gold_ret:-3.29, gsec_ret:1.77 },
+  "2017-04":{ n500_pe:27.59, n500_close:8214.30, n250_close:6197.51, gsec_10yr:6.961, cpi:2.99, gold_nav:26.41, usdinr:64.2700, n250_ret:3.44, gold_ret:1.07, gsec_ret:-1.29 },
+  "2017-05":{ n500_pe:27.92, n500_close:8350.95, n250_close:6217.95, gsec_10yr:6.661, cpi:2.18, gold_nav:26.18, usdinr:64.5050, n250_ret:0.33, gold_ret:-0.87, gsec_ret:1.83 },
+  "2017-06":{ n500_pe:27.72, n500_close:8331.60, n250_close:6266.39, gsec_10yr:6.511, cpi:1.46, gold_nav:25.77, usdinr:64.6150, n250_ret:0.78, gold_ret:-1.57, gsec_ret:1.63 },
+  "2017-07":{ n500_pe:29.33, n500_close:8793.30, n250_close:6596.12, gsec_10yr:6.465, cpi:2.36, gold_nav:25.71, usdinr:64.1700, n250_ret:5.26, gold_ret:-0.23, gsec_ret:0.86 },
+  "2017-08":{ n500_pe:29.63, n500_close:8694.95, n250_close:6562.40, gsec_10yr:6.525, cpi:3.28, gold_nav:26.53, usdinr:63.9300, n250_ret:-0.51, gold_ret:3.19, gsec_ret:0.11 },
+  "2017-09":{ n500_pe:29.58, n500_close:8600.00, n250_close:6532.45, gsec_10yr:6.663, cpi:3.28, gold_nav:26.66, usdinr:65.3050, n250_ret:-0.46, gold_ret:0.49, gsec_ret:-0.42 },
+  "2017-10":{ n500_pe:31.05, n500_close:9153.60, n250_close:6978.18, gsec_10yr:6.862, cpi:3.58, gold_nav:26.37, usdinr:64.7400, n250_ret:6.82, gold_ret:-1.09, gsec_ret:-0.77 },
+  "2017-11":{ n500_pe:31.44, n500_close:9154.50, n250_close:7055.34, gsec_10yr:7.058, cpi:4.88, gold_nav:26.30, usdinr:64.4800, n250_ret:1.11, gold_ret:-0.27, gsec_ret:-0.74 },
+  "2017-12":{ n500_pe:32.55, n500_close:9490.65, n250_close:7376.63, gsec_10yr:7.326, cpi:5.21, gold_nav:26.27, usdinr:63.8300, n250_ret:4.55, gold_ret:-0.11, gsec_ret:-1.26 },
+  "2018-01":{ n500_pe:32.36, n500_close:9697.90, n250_close:7409.63, gsec_10yr:7.430, cpi:5.07, gold_nav:27.09, usdinr:63.5400, n250_ret:0.45, gold_ret:3.12, gsec_ret:-1.23 },
+  "2018-02":{ n500_pe:30.75, n500_close:9261.90, n250_close:7098.30, gsec_10yr:7.726, cpi:4.44, gold_nav:27.30, usdinr:65.2000, n250_ret:-4.20, gold_ret:0.78, gsec_ret:-1.41 },
+  "2018-03":{ n500_pe:29.65, n500_close:8912.10, n250_close:6866.67, gsec_10yr:7.398, cpi:4.28, gold_nav:27.46, usdinr:65.1100, n250_ret:-3.26, gold_ret:0.59, gsec_ret:2.85 },
+  "2018-04":{ n500_pe:31.36, n500_close:9496.50, n250_close:7339.93, gsec_10yr:7.767, cpi:4.58, gold_nav:27.75, usdinr:66.4500, n250_ret:6.89, gold_ret:1.06, gsec_ret:-1.81 },
+  "2018-05":{ n500_pe:31.59, n500_close:9315.35, n250_close:7109.05, gsec_10yr:7.826, cpi:4.87, gold_nav:27.78, usdinr:67.4200, n250_ret:-3.15, gold_ret:0.11, gsec_ret:0.25 },
+  "2018-06":{ n500_pe:30.47, n500_close:9162.45, n250_close:6959.57, gsec_10yr:7.903, cpi:4.92, gold_nav:27.13, usdinr:68.4500, n250_ret:-2.10, gold_ret:-2.34, gsec_ret:0.12 },
+  "2018-07":{ n500_pe:33.59, n500_close:9650.60, n250_close:7314.91, gsec_10yr:7.772, cpi:4.17, gold_nav:26.50, usdinr:68.4500, n250_ret:5.11, gold_ret:-2.32, gsec_ret:1.54 },
+  "2018-08":{ n500_pe:34.50, n500_close:9992.00, n250_close:7642.63, gsec_10yr:7.951, cpi:3.69, gold_nav:27.05, usdinr:71.0000, n250_ret:4.48, gold_ret:2.08, gsec_ret:-0.54 },
+  "2018-09":{ n500_pe:30.21, n500_close:9116.00, n250_close:6869.05, gsec_10yr:8.024, cpi:3.70, gold_nav:27.03, usdinr:72.5000, n250_ret:-10.12, gold_ret:-0.07, gsec_ret:0.14 },
+  "2018-10":{ n500_pe:28.88, n500_close:8753.45, n250_close:6671.99, gsec_10yr:7.853, cpi:3.38, gold_nav:28.37, usdinr:73.9500, n250_ret:-2.87, gold_ret:4.96, gsec_ret:1.81 },
+  "2018-11":{ n500_pe:29.61, n500_close:9109.15, n250_close:6908.64, gsec_10yr:7.607, cpi:2.33, gold_nav:26.99, usdinr:69.6400, n250_ret:3.55, gold_ret:-4.86, gsec_ret:2.24 },
+  "2018-12":{ n500_pe:29.61, n500_close:9170.00, n250_close:6995.89, gsec_10yr:7.370, cpi:2.11, gold_nav:28.02, usdinr:69.5600, n250_ret:1.26, gold_ret:3.82, gsec_ret:2.14 },
+  "2019-01":{ n500_pe:29.13, n500_close:9003.85, n250_close:6799.71, gsec_10yr:7.483, cpi:1.97, gold_nav:29.35, usdinr:70.9500, n250_ret:-2.80, gold_ret:4.75, gsec_ret:-0.65 },
+  "2019-02":{ n500_pe:29.23, n500_close:8955.95, n250_close:6763.65, gsec_10yr:7.591, cpi:2.57, gold_nav:29.50, usdinr:70.8300, n250_ret:-0.53, gold_ret:0.51, gsec_ret:-0.26 },
+  "2019-03":{ n500_pe:31.22, n500_close:9663.70, n250_close:7310.40, gsec_10yr:7.346, cpi:2.86, gold_nav:28.08, usdinr:69.1800, n250_ret:8.08, gold_ret:-4.81, gsec_ret:1.01 },
+  "2019-04":{ n500_pe:31.22, n500_close:9664.30, n250_close:7217.16, gsec_10yr:7.414, cpi:2.99, gold_nav:28.15, usdinr:69.6360, n250_ret:-1.28, gold_ret:0.25, gsec_ret:0.17 },
+  "2019-05":{ n500_pe:31.64, n500_close:9805.05, n250_close:7355.00, gsec_10yr:7.032, cpi:3.05, gold_nav:28.38, usdinr:69.5700, n250_ret:1.91, gold_ret:0.82, gsec_ret:3.20 },
+  "2019-06":{ n500_pe:30.96, n500_close:9657.95, n250_close:7266.23, gsec_10yr:6.879, cpi:3.18, gold_nav:29.98, usdinr:68.9400, n250_ret:-1.21, gold_ret:5.64, gsec_ret:1.56 },
+  "2019-07":{ n500_pe:29.25, n500_close:9044.95, n250_close:6754.90, gsec_10yr:6.369, cpi:3.15, gold_nav:30.66, usdinr:68.8600, n250_ret:-7.04, gold_ret:2.27, gsec_ret:4.06 },
+  "2019-08":{ n500_pe:29.19, n500_close:8977.55, n250_close:6712.11, gsec_10yr:6.556, cpi:3.28, gold_nav:33.80, usdinr:71.4510, n250_ret:-0.63, gold_ret:10.24, gsec_ret:-0.79 },
+  "2019-09":{ n500_pe:28.22, n500_close:9340.90, n250_close:6969.46, gsec_10yr:6.695, cpi:3.99, gold_nav:32.97, usdinr:70.6400, n250_ret:3.83, gold_ret:-2.46, gsec_ret:-0.37 },
+  "2019-10":{ n500_pe:29.28, n500_close:9689.65, n250_close:7272.36, gsec_10yr:6.643, cpi:4.62, gold_nav:34.07, usdinr:70.9780, n250_ret:4.35, gold_ret:3.34, gsec_ret:0.91 },
+  "2019-11":{ n500_pe:29.83, n500_close:9813.65, n250_close:7390.46, gsec_10yr:6.460, cpi:5.54, gold_nav:33.41, usdinr:71.7460, n250_ret:1.62, gold_ret:-1.94, gsec_ret:0.41 },
+  "2019-12":{ n500_pe:30.84, n500_close:9872.55, n250_close:7418.01, gsec_10yr:6.554, cpi:7.35, gold_nav:34.45, usdinr:71.3500, n250_ret:0.37, gold_ret:3.11, gsec_ret:-0.10 },
+  "2020-01":{ n500_pe:30.01, n500_close:9861.45, n250_close:7562.88, gsec_10yr:6.599, cpi:7.59, gold_nav:35.87, usdinr:71.5400, n250_ret:1.95, gold_ret:4.12, gsec_ret:0.23 },
+  "2020-02":{ n500_pe:29.07, n500_close:9236.05, n250_close:7110.72, gsec_10yr:6.371, cpi:6.58, gold_nav:37.37, usdinr:72.5340, n250_ret:-5.98, gold_ret:4.18, gsec_ret:2.11 },
+  "2020-03":{ n500_pe:21.80, n500_close:6996.75, n250_close:5301.41, gsec_10yr:6.138, cpi:5.84, gold_nav:38.21, usdinr:75.3330, n250_ret:-25.44, gold_ret:2.25, gsec_ret:2.18 },
+  "2020-04":{ n500_pe:25.07, n500_close:8012.90, n250_close:6077.11, gsec_10yr:6.110, cpi:7.22, gold_nav:42.57, usdinr:75.0770, n250_ret:14.63, gold_ret:11.41, gsec_ret:0.74 },
+  "2020-05":{ n500_pe:25.18, n500_close:7822.40, n250_close:5947.61, gsec_10yr:6.013, cpi:6.27, gold_nav:40.99, usdinr:75.5900, n250_ret:-2.13, gold_ret:-3.71, gsec_ret:1.17 },
+  "2020-06":{ n500_pe:29.35, n500_close:8474.80, n250_close:6506.46, gsec_10yr:5.888, cpi:6.23, gold_nav:42.61, usdinr:75.5400, n250_ret:9.40, gold_ret:3.95, gsec_ret:-0.28 },
+  "2020-07":{ n500_pe:32.90, n500_close:9035.75, n250_close:6885.81, gsec_10yr:5.837, cpi:6.73, gold_nav:47.14, usdinr:74.9160, n250_ret:5.83, gold_ret:10.63, gsec_ret:0.85 },
+  "2020-08":{ n500_pe:36.88, n500_close:9372.05, n250_close:7267.70, gsec_10yr:6.078, cpi:6.69, gold_nav:45.34, usdinr:73.2540, n250_ret:5.55, gold_ret:-3.82, gsec_ret:-1.93 },
+  "2020-09":{ n500_pe:40.63, n500_close:9341.75, n250_close:7303.19, gsec_10yr:6.015, cpi:7.27, gold_nav:44.18, usdinr:73.5600, n250_ret:0.49, gold_ret:-2.56, gsec_ret:1.28 },
+  "2020-10":{ n500_pe:37.00, n500_close:9581.65, n250_close:7433.67, gsec_10yr:5.881, cpi:7.61, gold_nav:44.32, usdinr:74.5540, n250_ret:1.79, gold_ret:0.32, gsec_ret:1.47 },
+  "2020-11":{ n500_pe:40.58, n500_close:10719.05, n250_close:8411.04, gsec_10yr:5.911, cpi:6.93, gold_nav:42.84, usdinr:73.9900, n250_ret:13.15, gold_ret:-3.34, gsec_ret:0.22 },
+  "2020-12":{ n500_pe:43.39, n500_close:11518.30, n250_close:8966.47, gsec_10yr:5.894, cpi:4.59, gold_nav:43.75, usdinr:73.0360, n250_ret:6.60, gold_ret:2.12, gsec_ret:0.45 },
+  "2021-01":{ n500_pe:40.19, n500_close:11302.40, n250_close:8868.34, gsec_10yr:5.949, cpi:4.06, gold_nav:42.65, usdinr:72.8770, n250_ret:-1.09, gold_ret:-2.51, gsec_ret:0.22 },
+  "2021-02":{ n500_pe:42.65, n500_close:12181.40, n250_close:9706.40, gsec_10yr:6.229, cpi:5.03, gold_nav:40.25, usdinr:73.9200, n250_ret:9.45, gold_ret:-5.63, gsec_ret:-1.83 },
+  "2021-03":{ n500_pe:35.89, n500_close:12313.70, n250_close:9855.64, gsec_10yr:6.177, cpi:5.52, gold_nav:38.17, usdinr:73.1370, n250_ret:1.54, gold_ret:-5.17, gsec_ret:0.99 },
+  "2021-04":{ n500_pe:35.37, n500_close:12364.35, n250_close:9931.20, gsec_10yr:6.030, cpi:4.23, gold_nav:40.59, usdinr:74.0500, n250_ret:0.77, gold_ret:6.34, gsec_ret:1.39 },
+  "2021-05":{ n500_pe:31.33, n500_close:13226.35, n250_close:10598.29, gsec_10yr:6.022, cpi:6.30, gold_nav:42.59, usdinr:72.5110, n250_ret:6.72, gold_ret:4.93, gsec_ret:0.59 },
+  "2021-06":{ n500_pe:30.20, n500_close:13473.55, n250_close:10922.19, gsec_10yr:6.051, cpi:6.26, gold_nav:40.52, usdinr:74.3600, n250_ret:3.06, gold_ret:-4.86, gsec_ret:0.28 },
+  "2021-07":{ n500_pe:28.82, n500_close:13664.25, n250_close:11139.76, gsec_10yr:6.204, cpi:5.59, gold_nav:41.92, usdinr:74.3370, n250_ret:1.99, gold_ret:3.46, gsec_ret:-1.10 },
+  "2021-08":{ n500_pe:27.21, n500_close:14555.90, n250_close:11724.91, gsec_10yr:6.215, cpi:5.30, gold_nav:40.83, usdinr:72.9470, n250_ret:5.25, gold_ret:-2.60, gsec_ret:0.44 },
+  "2021-09":{ n500_pe:28.02, n500_close:15052.65, n250_close:12241.87, gsec_10yr:6.223, cpi:4.35, gold_nav:39.72, usdinr:74.1640, n250_ret:4.41, gold_ret:-2.72, gsec_ret:0.50 },
+  "2021-10":{ n500_pe:26.92, n500_close:15086.90, n250_close:12277.04, gsec_10yr:6.388, cpi:4.48, gold_nav:41.50, usdinr:74.9150, n250_ret:0.29, gold_ret:4.48, gsec_ret:-0.71 },
+  "2021-11":{ n500_pe:24.70, n500_close:14648.35, n250_close:11991.57, gsec_10yr:6.326, cpi:4.91, gold_nav:41.51, usdinr:75.0900, n250_ret:-2.33, gold_ret:0.02, gsec_ret:0.96 },
+  "2021-12":{ n500_pe:25.44, n500_close:14996.20, n250_close:12287.50, gsec_10yr:6.454, cpi:5.66, gold_nav:41.48, usdinr:74.4670, n250_ret:2.47, gold_ret:-0.07, gsec_ret:-0.36 },
+  "2022-01":{ n500_pe:24.77, n500_close:14921.45, n250_close:12195.19, gsec_10yr:6.684, cpi:6.01, gold_nav:41.25, usdinr:74.5290, n250_ret:-0.75, gold_ret:-0.55, gsec_ret:-1.11 },
+  "2022-02":{ n500_pe:22.67, n500_close:14307.95, n250_close:11610.45, gsec_10yr:6.770, cpi:6.07, gold_nav:43.59, usdinr:75.4930, n250_ret:-4.79, gold_ret:5.67, gsec_ret:-0.07 },
+  "2022-03":{ n500_pe:23.67, n500_close:14894.50, n250_close:12112.92, gsec_10yr:6.843, cpi:6.95, gold_nav:44.12, usdinr:75.9010, n250_ret:4.33, gold_ret:1.22, gsec_ret:0.17 },
+  "2022-04":{ n500_pe:23.15, n500_close:14783.35, n250_close:12084.74, gsec_10yr:7.139, cpi:7.79, gold_nav:44.79, usdinr:76.5200, n250_ret:-0.23, gold_ret:1.52, gsec_ret:-1.64 },
+  "2022-05":{ n500_pe:21.07, n500_close:14119.60, n250_close:11551.17, gsec_10yr:7.415, cpi:7.04, gold_nav:43.95, usdinr:77.5690, n250_ret:-4.42, gold_ret:-1.88, gsec_ret:-1.32 },
+  "2022-06":{ n500_pe:20.05, n500_close:13387.55, n250_close:10967.35, gsec_10yr:7.450, cpi:7.01, gold_nav:43.76, usdinr:78.9500, n250_ret:-5.05, gold_ret:-0.43, gsec_ret:0.45 },
+  "2022-07":{ n500_pe:21.47, n500_close:14665.65, n250_close:12123.38, gsec_10yr:7.320, cpi:6.71, gold_nav:44.06, usdinr:79.3360, n250_ret:10.54, gold_ret:0.69, gsec_ret:1.44 },
+  "2022-08":{ n500_pe:22.25, n500_close:15325.05, n250_close:12755.46, gsec_10yr:7.188, cpi:7.00, gold_nav:43.90, usdinr:79.4910, n250_ret:5.21, gold_ret:-0.36, gsec_ret:1.49 },
+  "2022-09":{ n500_pe:21.65, n500_close:14829.35, n250_close:12412.14, gsec_10yr:7.398, cpi:7.41, gold_nav:43.16, usdinr:81.5090, n250_ret:-2.69, gold_ret:-1.69, gsec_ret:-1.20 },
+  "2022-10":{ n500_pe:22.21, n500_close:15424.00, n250_close:12818.07, gsec_10yr:7.445, cpi:6.77, gold_nav:43.23, usdinr:82.7700, n250_ret:3.27, gold_ret:0.16, gsec_ret:0.24 },
+  "2022-11":{ n500_pe:23.43, n500_close:15946.15, n250_close:13183.19, gsec_10yr:7.280, cpi:5.88, gold_nav:45.10, usdinr:81.3590, n250_ret:2.85, gold_ret:4.33, gsec_ret:1.72 },
+  "2022-12":{ n500_pe:22.85, n500_close:15448.85, n250_close:12838.50, gsec_10yr:7.327, cpi:5.72, gold_nav:46.79, usdinr:82.7170, n250_ret:-2.61, gold_ret:3.75, gsec_ret:0.29 },
+  "2023-01":{ n500_pe:21.76, n500_close:14935.50, n250_close:12454.46, gsec_10yr:7.343, cpi:6.52, gold_nav:48.67, usdinr:81.7390, n250_ret:-2.99, gold_ret:4.02, gsec_ret:0.42 },
+  "2023-02":{ n500_pe:21.21, n500_close:14518.75, n250_close:12182.51, gsec_10yr:7.457, cpi:6.44, gold_nav:47.41, usdinr:82.6400, n250_ret:-2.18, gold_ret:-2.59, gsec_ret:-0.03 },
+  "2023-03":{ n500_pe:21.14, n500_close:14557.85, n250_close:12188.35, gsec_10yr:7.315, cpi:5.66, gold_nav:51.07, usdinr:82.1600, n250_ret:0.05, gold_ret:7.72, gsec_ret:1.44 },
+  "2023-04":{ n500_pe:21.82, n500_close:15219.55, n250_close:12762.96, gsec_10yr:7.116, cpi:4.70, gold_nav:51.25, usdinr:81.7200, n250_ret:4.71, gold_ret:0.35, gsec_ret:1.90 },
+  "2023-05":{ n500_pe:22.56, n500_close:15766.40, n250_close:13333.76, gsec_10yr:6.989, cpi:4.31, gold_nav:51.13, usdinr:82.6800, n250_ret:4.47, gold_ret:-0.23, gsec_ret:1.49 },
+  "2023-06":{ n500_pe:23.51, n500_close:16430.00, n250_close:14007.24, gsec_10yr:7.110, cpi:4.87, gold_nav:49.31, usdinr:82.0910, n250_ret:5.05, gold_ret:-3.56, gsec_ret:-0.24 },
+  "2023-07":{ n500_pe:24.24, n500_close:17059.00, n250_close:14622.00, gsec_10yr:7.172, cpi:7.44, gold_nav:50.66, usdinr:82.2400, n250_ret:4.39, gold_ret:2.74, gsec_ret:0.18 },
+  "2023-08":{ n500_pe:23.07, n500_close:16924.30, n250_close:14761.91, gsec_10yr:7.166, cpi:6.83, gold_nav:50.35, usdinr:82.7020, n250_ret:0.96, gold_ret:-0.61, gsec_ret:0.64 },
+  "2023-09":{ n500_pe:23.45, n500_close:17292.60, n250_close:15134.76, gsec_10yr:7.210, cpi:5.02, gold_nav:49.29, usdinr:83.0300, n250_ret:2.53, gold_ret:-2.11, gsec_ret:0.03 },
+  "2023-10":{ n500_pe:21.78, n500_close:16801.10, n250_close:14645.18, gsec_10yr:7.351, cpi:4.87, gold_nav:52.06, usdinr:83.2560, n250_ret:-3.23, gold_ret:5.62, gsec_ret:-0.35 },
+  "2023-11":{ n500_pe:22.68, n500_close:17987.95, n250_close:15809.43, gsec_10yr:7.279, cpi:5.55, gold_nav:53.15, usdinr:83.3570, n250_ret:7.95, gold_ret:2.09, gsec_ret:1.09 },
+  "2023-12":{ n500_pe:24.48, n500_close:19429.15, n250_close:17031.33, gsec_10yr:7.176, cpi:5.69, gold_nav:53.66, usdinr:83.1900, n250_ret:7.73, gold_ret:0.96, gsec_ret:1.27 },
+  "2024-01":{ n500_pe:24.20, n500_close:19802.10, n250_close:17490.17, gsec_10yr:7.144, cpi:5.10, gold_nav:53.35, usdinr:83.0950, n250_ret:2.69, gold_ret:-0.58, gsec_ret:0.82 },
+  "2024-02":{ n500_pe:24.37, n500_close:20090.05, n250_close:17667.52, gsec_10yr:7.078, cpi:5.09, gold_nav:52.78, usdinr:82.9000, n250_ret:1.01, gold_ret:-1.07, gsec_ret:1.03 },
+  "2024-03":{ n500_pe:24.74, n500_close:20255.15, n250_close:17792.02, gsec_10yr:7.052, cpi:4.85, gold_nav:56.61, usdinr:83.3500, n250_ret:0.70, gold_ret:7.26, gsec_ret:0.72 },
+  "2024-04":{ n500_pe:24.73, n500_close:20997.20, n250_close:18558.40, gsec_10yr:7.195, cpi:4.83, gold_nav:60.88, usdinr:83.4500, n250_ret:4.31, gold_ret:7.54, gsec_ret:-0.38 },
+  "2024-05":{ n500_pe:24.48, n500_close:21103.30, n250_close:18828.57, gsec_10yr:6.986, cpi:4.80, gold_nav:61.29, usdinr:83.4240, n250_ret:1.46, gold_ret:0.67, gsec_ret:1.80 },
+  "2024-06":{ n500_pe:26.23, n500_close:22559.70, n250_close:20194.59, gsec_10yr:7.008, cpi:5.08, gold_nav:60.63, usdinr:83.3550, n250_ret:7.26, gold_ret:-1.08, gsec_ret:0.38 },
+  "2024-07":{ n500_pe:27.10, n500_close:23530.80, n250_close:21122.12, gsec_10yr:6.924, cpi:3.60, gold_nav:58.68, usdinr:83.6990, n250_ret:4.59, gold_ret:-3.22, gsec_ret:1.19 },
+  "2024-08":{ n500_pe:27.19, n500_close:23734.55, n250_close:21283.26, gsec_10yr:6.863, cpi:3.65, gold_nav:60.66, usdinr:83.8670, n250_ret:0.76, gold_ret:3.37, gsec_ret:0.96 },
+  "2024-09":{ n500_pe:27.87, n500_close:24245.20, n250_close:21725.06, gsec_10yr:6.750, cpi:5.49, gold_nav:63.55, usdinr:83.7550, n250_ret:2.08, gold_ret:4.76, gsec_ret:1.34 },
+  "2024-10":{ n500_pe:26.07, n500_close:22689.35, n250_close:20297.40, gsec_10yr:6.841, cpi:6.21, gold_nav:66.92, usdinr:84.0610, n250_ret:-6.57, gold_ret:5.30, gsec_ret:-0.14 },
+  "2024-11":{ n500_pe:25.77, n500_close:22687.00, n250_close:20321.56, gsec_10yr:6.751, cpi:5.48, gold_nav:64.29, usdinr:84.5590, n250_ret:0.12, gold_ret:-3.93, gsec_ret:0.91 },
+  "2024-12":{ n500_pe:25.56, n500_close:22375.40, n250_close:20212.80, gsec_10yr:6.760, cpi:5.22, gold_nav:64.09, usdinr:85.5540, n250_ret:-0.54, gold_ret:-0.31, gsec_ret:0.54 },
+  "2025-01":{ n500_pe:24.27, n500_close:21580.90, n250_close:19424.39, gsec_10yr:6.690, cpi:4.26, gold_nav:69.08, usdinr:86.5610, n250_ret:-3.90, gold_ret:7.79, gsec_ret:1.00 },
+  "2025-02":{ n500_pe:21.84, n500_close:19880.90, n250_close:17785.36, gsec_10yr:6.720, cpi:3.61, gold_nav:71.10, usdinr:87.4710, n250_ret:-8.44, gold_ret:2.92, gsec_ret:0.36 },
+  "2025-03":{ n500_pe:23.54, n500_close:21339.55, n250_close:19096.21, gsec_10yr:6.570, cpi:3.34, gold_nav:74.16, usdinr:85.4600, n250_ret:7.37, gold_ret:4.30, gsec_ret:1.50 },
+  "2025-04":{ n500_pe:24.09, n500_close:22030.05, n250_close:19787.59, gsec_10yr:6.352, cpi:3.16, gold_nav:79.09, usdinr:84.5990, n250_ret:3.62, gold_ret:6.65, gsec_ret:2.09 },
+  "2025-05":{ n500_pe:24.59, n500_close:22801.95, n250_close:20636.51, gsec_10yr:6.210, cpi:2.82, gold_nav:79.49, usdinr:85.5250, n250_ret:4.29, gold_ret:0.51, gsec_ret:1.24 },
+  "2025-06":{ n500_pe:25.34, n500_close:23617.20, n250_close:21412.54, gsec_10yr:6.316, cpi:2.10, gold_nav:79.99, usdinr:85.7000, n250_ret:3.76, gold_ret:0.63, gsec_ret:-0.19 },
+  "2025-07":{ n500_pe:24.27, n500_close:22914.95, n250_close:20825.82, gsec_10yr:6.376, cpi:1.61, gold_nav:82.20, usdinr:87.5240, n250_ret:-2.74, gold_ret:2.76, gsec_ret:0.10 },
+  "2025-08":{ n500_pe:23.49, n500_close:22462.95, n250_close:20399.82, gsec_10yr:6.588, cpi:2.07, gold_nav:85.34, usdinr:88.1740, n250_ret:-2.05, gold_ret:3.82, gsec_ret:-1.00 },
+  "2025-09":{ n500_pe:23.80, n500_close:22734.10, n250_close:20666.09, gsec_10yr:6.571, cpi:1.44, gold_nav:95.85, usdinr:88.8410, n250_ret:1.31, gold_ret:12.32, gsec_ret:0.70 },
+  "2025-10":{ n500_pe:24.60, n500_close:23710.40, n250_close:21610.85, gsec_10yr:6.529, cpi:0.25, gold_nav:100.02, usdinr:88.7690, n250_ret:4.57, gold_ret:4.35, gsec_ret:0.76 },
+  "2025-11":{ n500_pe:24.45, n500_close:23933.20, n250_close:21947.08, gsec_10yr:6.528, cpi:0.71, gold_nav:104.62, usdinr:89.3570, n250_ret:1.56, gold_ret:4.60, gsec_ret:0.25 },
+  "2025-12":{ n500_pe:24.45, n500_close:23871.55, n250_close:21868.98, gsec_10yr:6.588, cpi:1.33, gold_nav:110.11, usdinr:89.8710, n250_ret:-0.36, gold_ret:5.25, gsec_ret:-0.12 },
+  "2026-01":{ n500_pe:23.48, n500_close:23079.50, n250_close:21169.33, gsec_10yr:6.695, cpi:4.26, gold_nav:131.12, usdinr:91.6940, n250_ret:-3.20, gold_ret:19.08, gsec_ret:-0.14 },
+  "2026-02":{ n500_pe:23.50, n500_close:23166.85, n250_close:21363.06, gsec_10yr:6.661, cpi:3.61, gold_nav:131.60, usdinr:91.0760, n250_ret:0.92, gold_ret:0.37, gsec_ret:0.72 },
+};
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const sortedKeys = () => Object.keys(DATA).sort();
+
+function getKey(){ return document.getElementById('sel-year').value+'-'+document.getElementById('sel-month').value; }
+
+// ── Derived signal computation ───────────────────────────────────────────────
+function computeDerived(key) {
+  const keys = sortedKeys();
+  const idx   = keys.indexOf(key);
+  const d     = DATA[key];
+  if (!d) return null;
+
+  // 1. P/E percentile vs all available data (uses n500_pe)
+  const allPEs   = keys.map(k=>DATA[k].n500_pe).filter(Number.isFinite);
+  const peRank   = allPEs.filter(v=>v<=d.n500_pe).length/allPEs.length*100;
+
+  // 2. Nifty LM250 vs 10-month MA (uses n250_close — the actual instrument)
+  const prev10c  = keys.slice(Math.max(0,idx-9),idx+1).map(k=>DATA[k].n250_close).filter(Number.isFinite);
+  const ma10c    = prev10c.length ? prev10c.reduce((a,b)=>a+b,0)/prev10c.length : d.n250_close;
+  const smaPct   = ((d.n250_close/ma10c)-1)*100;
+
+  // 3. EPS auto-computed as n500_close ÷ n500_pe, then 3-month trend
+  const eps3Key  = idx>=3 ? keys[idx-3] : null;
+  const epsNow   = (d.n500_close && d.n500_pe) ? d.n500_close / d.n500_pe : null;
+  const eps3Val  = (eps3Key && DATA[eps3Key].n500_close && DATA[eps3Key].n500_pe)
+                   ? DATA[eps3Key].n500_close / DATA[eps3Key].n500_pe : null;
+  const epsChg   = (epsNow && eps3Val) ? ((epsNow/eps3Val)-1)*100 : 0;
+  const epsTrend = epsChg > 2 ? 1 : epsChg < -2 ? -1 : 0;
+  const epsLabel = epsTrend===1
+    ? `+${epsChg.toFixed(1)}% (3m) — Accelerating ↑`
+    : epsTrend===-1
+    ? `${epsChg.toFixed(1)}% (3m) — Declining ↓`
+    : `${epsChg>=0?'+':''}${epsChg.toFixed(1)}% (3m) — Stable`;
+
+  // 4. Real yield
+  const realYield = d.gsec_10yr - d.cpi;
+
+  // 5. Gold vs 10-month MA
+  const prev10g  = keys.slice(Math.max(0,idx-9),idx+1).map(k=>DATA[k].gold_nav).filter(Number.isFinite);
+  const ma10g    = prev10g.length ? prev10g.reduce((a,b)=>a+b,0)/prev10g.length : d.gold_nav;
+  const goldSma  = ((d.gold_nav/ma10g)-1)*100;
+
+  // 6. USD/INR 3-month trend
+  const inr3     = idx>=3 ? DATA[keys[idx-3]].usdinr : d.usdinr;
+  const inrChg   = ((d.usdinr/inr3)-1)*100;
+  const inrTrend = inrChg > 0.5 ? 1 : inrChg < -0.5 ? -1 : 0;
+  const inrLabel = inrTrend===1 ? 'INR weakening (₹ depreciating)' : inrTrend===-1 ? 'INR strengthening' : 'Stable';
+
+  // 7. G-Sec yield percentile
+  const allY     = keys.map(k=>DATA[k].gsec_10yr).filter(Number.isFinite);
+  const yPctile  = allY.filter(v=>v<=d.gsec_10yr).length/allY.length*100;
+
+  // 8. CPI trajectory (6-month change) — fully quantitative RBI stance proxy
+  const cpi6     = idx>=6 ? DATA[keys[idx-6]].cpi : d.cpi;
+  const cpiChg   = d.cpi - cpi6;
+  const cpiTrend = cpiChg < -0.5 ? 1 : cpiChg > 0.5 ? -1 : 0;
+  const cpiLabel = (cpiChg>=0?'+':'')+cpiChg.toFixed(1)+'pp (6m) — '+(cpiTrend===1?'Falling ↓':cpiTrend===-1?'Rising ↑':'Stable');
+
+  return { peRank, smaPct, epsTrend, epsLabel, realYield, goldSma, inrTrend, inrLabel, yPctile, cpiTrend, cpiLabel };
+}
+
+// ── Scoring ──────────────────────────────────────────────────────────────────
+function scoreSignals() {
+  const pe   = +document.getElementById('pe-sl').value;
+  const sma  = +document.getElementById('sma-sl').value;
+  const epsS = window._epsTrend ?? 0;
+  const ry   = +document.getElementById('ry-sl').value;
+  const gsma = +document.getElementById('gsma-sl').value;
+  const inrS = window._inrTrend ?? 0;
+  const yp   = +document.getElementById('yp-sl').value;
+  const cpiS = window._cpiTrend ?? 0;
+
+  const s_pe=pe<30?1:pe<=65?0:-1, s_sma=sma>5?1:sma>=-5?0:-1;
+  const s_eps=epsS;
+  const s_ry=ry<-2?1:ry<=5?0:-1, s_gsma=gsma>5?1:gsma>=-5?0:-1;
+  const s_inr=inrS, s_yp=yp>70?1:yp>=30?0:-1, s_cpi=cpiS;
+
+  const eqScore=s_pe+s_sma+s_eps, goldScore=s_ry+s_gsma+s_inr, debtScore=s_yp+s_cpi;
+
+  return {
+    scores:{eq:eqScore,gold:goldScore,debt:debtScore},
+    raw:{pe,sma,ry,gsma,yp},
+    sigs:[
+      {g:'eq',  name:'P/E percentile',   val:Math.round(pe)+'th pctile',            score:s_pe},
+      {g:'eq',  name:'LM250 vs 10m MA',  val:(sma>=0?'+':'')+sma.toFixed(1)+'%',   score:s_sma},
+      {g:'eq',  name:'EPS trend (3m)',   val:window._epsLabel||'—',                 score:s_eps},
+      {g:'gold',name:'Real yield',       val:(ry>=0?'+':'')+ry.toFixed(1)+'%',     score:s_ry},
+      {g:'gold',name:'Gold vs 10m MA',   val:(gsma>=0?'+':'')+gsma.toFixed(1)+'%', score:s_gsma},
+      {g:'gold',name:'USD/INR trend',    val:inrS===1?'INR weak':inrS===-1?'INR strong':'Stable', score:s_inr},
+      {g:'debt',name:'Yield pctile',     val:Math.round(yp)+'th pctile',            score:s_yp},
+      {g:'debt',name:'CPI trajectory',   val:cpiS===1?'Falling':cpiS===-1?'Rising':'Stable', score:s_cpi},
+    ]
+  };
+}
+
+function scoreToAlloc(eqS,goldS,debtS){
+  // HYBRID approach — optimised by grid search (Jan 2016–Feb 2026, 7776 combinations)
+  // Equity and gold both set independently from their signals.
+  // When they conflict (sum > 100), gold compresses more (eq_weight=0.8 → gold bears 80% of cut).
+  // Debt is purely residual — it has no signal-driven target, just fills the gap.
+  // Result: CAGR=17.47% | Sharpe=1.219 | MaxDD=-9.4% | Calmar=1.86
+  const eq_fl=35,eq_cl=75,gold_cl=55,gf=10,df=10,eq_w=0.8;
+  let eq_t   = eq_fl  + ((eqS  +3)/6)*(eq_cl -eq_fl);
+  let gold_t = gf     + ((goldS+3)/6)*(gold_cl-gf   );
+  eq_t   = Math.max(eq_fl,  Math.min(eq_cl,   eq_t));
+  gold_t = Math.max(gf,     Math.min(gold_cl, gold_t));
+  const total = eq_t + gold_t + df;
+  if(total > 100){
+    const excess  = total - 100;
+    const eq_sur  = eq_t   - eq_fl;
+    const gold_sur= gold_t - gf;
+    const tot_sur = eq_sur + gold_sur;
+    if(tot_sur > 0){
+      const eq_cs   = eq_w        * (eq_sur  /tot_sur);
+      const gold_cs = (1.0-eq_w)  * (gold_sur/tot_sur);
+      const tc = eq_cs + gold_cs;
+      if(tc > 0){ eq_t -= excess*eq_cs/tc; gold_t -= excess*gold_cs/tc; }
+    }
+  }
+  eq_t   = Math.max(eq_fl,  Math.min(eq_cl,   eq_t));
+  gold_t = Math.max(gf,     Math.min(gold_cl, gold_t));
+  const eq_r   = Math.round(eq_t  /5)*5;
+  const gold_r = Math.round(gold_t/5)*5;
+  const debt_r = Math.max(df, Math.min(55, 100-eq_r-gold_r));
+  const gold_f = Math.max(gf, Math.min(gold_cl, 100-eq_r-debt_r));
+  return{eq:eq_r, gold:gold_f, debt:100-eq_r-gold_f};
+}
+
+function classify(s){
+  if(s>=3)   return{name:'Strong Bull',      desc:'All 3 equity signals positive. Maximum equity allocation.',  color:'#7c6af7'};
+  if(s>=1)   return{name:'Moderate Bull',    desc:'Positive trend, fair valued. Balanced growth bias.',         color:'#a78bfa'};
+  if(s===0)  return{name:'Sideways / Neutral',desc:'Mixed signals. No strong directional conviction.',          color:'#94a3b8'};
+  if(s>=-2)  return{name:'Cautious',          desc:'Trend weakening. Trim equity, add diversifiers.',           color:'#f5a623'};
+  return          {name:'Bear / Risk-Off',    desc:'All signals negative. Minimum equity floor. Defensive.',    color:'#ef4444'};
+}
+
+// ── Chart (donut) ────────────────────────────────────────────────────────────
+const ctx0=document.getElementById('allocChart').getContext('2d');
+const allocChart=new Chart(ctx0,{type:'doughnut',data:{labels:['Nifty LM250','Gold ETF','Nifty 10yr G-Sec'],datasets:[{data:[50,20,30],backgroundColor:['#7c6af7','#f5a623','#2dd4bf'],borderColor:'#131720',borderWidth:3,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',animation:{duration:500,easing:'easeInOutQuart'},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}%`},backgroundColor:'#1a2030',borderColor:'#242c3d',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:9,cornerRadius:7}}}});
+
+// ── UI helpers ───────────────────────────────────────────────────────────────
+function setInd(id,s){const el=document.getElementById(id);if(!el)return;el.textContent=s>0?'+1':s<0?'-1':'0';el.className='sind '+(s>0?'sp':s<0?'sb':'sn');}
+function setSBar(bid,s,mx,col){const b=document.getElementById(bid);if(!b)return;const p=((s+mx)/(2*mx))*100;b.style.width=Math.abs(p-50)+'%';b.style.left=s>=0?'50%':p+'%';b.style.background=s>0?col:s<0?'#ef4444':'#475569';}
+function setBadge(id,s,mx,col){const el=document.getElementById(id);if(!el)return;el.textContent=(s>=0?'+':'')+s+' / '+mx;el.style.background=s>0?col.replace(')',',0.18)').replace('rgb','rgba'):s<0?'rgba(239,68,68,0.13)':'rgba(100,116,139,0.13)';el.style.color=s>0?col:s<0?'#ef4444':'#94a3b8';}
+
+// ── Main update ──────────────────────────────────────────────────────────────
+function update(){
+  const key=getKey();
+  const [y,m]=key.split('-');
+  const periodLabel=MONTHS[+m-1]+' '+y;
+  document.getElementById('out-period').textContent = futureMode ? 'Future / What-If' : periodLabel;
+
+  const {scores,raw,sigs}=scoreSignals();
+  const{eq,gold,debt}=scoreToAlloc(scores.eq,scores.gold,scores.debt);
+  const reg=classify(scores.eq);
+
+  // Slider display
+  document.getElementById('pe-v').textContent=Math.round(raw.pe)+'th';
+  document.getElementById('sma-v').textContent=(raw.sma>=0?'+':'')+raw.sma.toFixed(1)+'%';
+  document.getElementById('ry-v').textContent=(raw.ry>=0?'+':'')+raw.ry.toFixed(1)+'%';
+  document.getElementById('gsma-v').textContent=(raw.gsma>=0?'+':'')+raw.gsma.toFixed(1)+'%';
+  document.getElementById('yp-v').textContent=Math.round(raw.yp)+'th';
+
+  // Indicators
+  setInd('pe-i',sigs[0].score);setInd('sma-i',sigs[1].score);setInd('eps-i',sigs[2].score);
+  setInd('ry-i',sigs[3].score);setInd('gsma-i',sigs[4].score);
+  setInd('inr-i',sigs[5].score);setInd('yp-i',sigs[6].score);setInd('cpi-i',sigs[7].score);
+
+  // Badges
+  setBadge('eq-badge',scores.eq,3,'#7c6af7');
+  setBadge('gold-badge',scores.gold,3,'#f5a623');
+  setBadge('debt-badge',scores.debt,2,'#2dd4bf');
+
+  // Regime
+  document.getElementById('regime-name').textContent=reg.name;
+  document.getElementById('regime-name').style.color=reg.color;
+  document.getElementById('regime-desc').textContent=reg.desc;
+
+  // Chart + bars
+  allocChart.data.datasets[0].data=[eq,gold,debt]; allocChart.update();
+  ['eq','gold','debt'].forEach(a=>{const v=a==='eq'?eq:a==='gold'?gold:debt;document.getElementById(a+'-pct').textContent=v+'%';document.getElementById(a+'-bar').style.width=v+'%';});
+
+  // Score bars
+  setSBar('eq-sb',scores.eq,3,'#7c6af7');setSBar('gold-sb',scores.gold,3,'#f5a623');setSBar('debt-sb',scores.debt,2,'#2dd4bf');
+  document.getElementById('eq-sv').textContent=(scores.eq>=0?'+':'')+scores.eq;
+  document.getElementById('gold-sv').textContent=(scores.gold>=0?'+':'')+scores.gold;
+  document.getElementById('debt-sv').textContent=(scores.debt>=0?'+':'')+scores.debt;
+
+  // Signal table
+  const tbody=document.getElementById('sig-tbl');
+  const dc=s=>s>0?'#22c55e':s<0?'#ef4444':'#64748b';
+  const gc=g=>g==='eq'?'#7c6af7':g==='gold'?'#f5a623':'#2dd4bf';
+  const gl={eq:'Equity signals',gold:'Gold signals',debt:'Debt signals'};
+  let lg='';
+  tbody.innerHTML=sigs.map(s=>{let h='';if(s.g!==lg){lg=s.g;h+=`<tr class="grph"><td colspan="3"><span class="grl" style="color:${gc(s.g)}">${gl[s.g]}</span></td></tr>`;}h+=`<tr><td class="tdn"><span style="width:5px;height:5px;border-radius:50%;background:${gc(s.g)};display:inline-block;flex-shrink:0"></span>${s.name}</td><td class="tdv">${s.val}</td><td class="tds" style="color:${dc(s.score)}">${s.score>0?'+1':s.score<0?'-1':'0'}</td></tr>`;return h;}).join('');
+
+  document.getElementById('rebal-note').textContent=`${periodLabel}: Monthly review. Rebalance only when drift > 5% from target (Eq:${eq}% / Gold:${gold}% / Debt:${debt}%).`;
+}
+
+// ── Load period ──────────────────────────────────────────────────────────────
+function loadPeriod(){
+  const key=getKey();
+  const d=DATA[key];
+  document.querySelectorAll('.hpill').forEach(p=>p.classList.toggle('active',p.dataset.key===key));
+
+  const st=document.getElementById('dstatus'),tx=document.getElementById('dstatus-txt');
+  const ndo=document.getElementById('ndo');
+
+  if(d){
+    st.className='dstatus ds-ok';tx.textContent='Data loaded';ndo.classList.remove('vis');
+
+    // Compute all derived signals from raw data
+    const der=computeDerived(key);
+    if(der){
+      // Sliders: set from auto-computed values
+      const _set = (id, val) => { const el=document.getElementById(id); if(el) el.value=val; };
+      _set('pe-sl',   Math.round(der.peRank));
+      _set('sma-sl',  Math.round(Math.max(-30,Math.min(30,der.smaPct))));
+      _set('ry-sl',   Math.round(der.realYield*10)/10);
+      _set('gsma-sl', Math.round(Math.max(-20,Math.min(30,der.goldSma))));
+      _set('yp-sl',   Math.round(der.yPctile));
+      // Breadth: manual input from data store
+      // Store all auto-computed signals for scoring
+      window._epsTrend = der.epsTrend;
+      window._epsLabel = der.epsLabel;
+      window._inrTrend = der.inrTrend;
+      window._cpiTrend = der.cpiTrend;
+      // Update auto-computed display rows
+      document.getElementById('eps-auto-val').textContent = der.epsLabel;
+      document.getElementById('inr-auto-val').textContent = der.inrLabel;
+      document.getElementById('cpi-auto-val').textContent = der.cpiLabel;
+    }
+  } else {
+    st.className='dstatus ds-no';tx.textContent='No data';ndo.classList.add('vis');
+    window._epsTrend=0;window._epsLabel='—';
+    window._inrTrend=0;window._cpiTrend=0;
+    document.getElementById('eps-auto-val').textContent='—';
+    document.getElementById('inr-auto-val').textContent='—';
+    document.getElementById('cpi-auto-val').textContent='—';
+    ['eps-i','inr-i','cpi-i'].forEach(id=>{const el=document.getElementById(id);if(el){el.className='sind sn';el.textContent='0';}});
+  }
+  update();
+  applyLockState();
+}
+
+function navMonth(dir){
+  const ms=document.getElementById('sel-month'),ys=document.getElementById('sel-year');
+  let m=+ms.value+dir,y=+ys.value;
+  if(m>12){m=1;y++;}if(m<1){m=12;y--;}
+  ms.value=String(m).padStart(2,'0');ys.value=y;loadPeriod();
+}
+
+// ── Backtest engine ──────────────────────────────────────────────────────────
+function getAllocForKey(key){
+  const d=DATA[key];if(!d)return{eq:50,gold:25,debt:25};
+  const der=computeDerived(key);if(!der)return{eq:50,gold:25,debt:25};
+  const s_pe  = der.peRank<30?1:der.peRank<=65?0:-1;
+  const s_sma = der.smaPct>5?1:der.smaPct>=-5?0:-1;
+  const s_eps = der.epsTrend;
+  const s_ry  = der.realYield<-2?1:der.realYield<=5?0:-1;
+  const s_gsma= der.goldSma>5?1:der.goldSma>=-5?0:-1;
+  const s_inr = der.inrTrend;
+  const s_yp  = der.yPctile>70?1:der.yPctile>=30?0:-1;
+  const s_cpi = der.cpiTrend;
+  return scoreToAlloc(s_pe+s_sma+s_eps, s_ry+s_gsma+s_inr, s_yp+s_cpi);
+}
+
+function runBacktest(){
+  const keys=sortedKeys();
+  const retKeys=keys.filter(k=>DATA[k].n250_ret!==undefined&&DATA[k].gsec_ret!==undefined);
+  if(retKeys.length<3)return null;
+
+  const dynVals=[100],staVals=[100],eqVals=[100],goldVals=[100],debtVals=[100],labels=[];
+  const dynRets=[],staRets=[],eqRets=[],goldRets=[],debtRets=[];
+
+  for(let i=0;i<retKeys.length;i++){
+    const k=retKeys[i]; const d=DATA[k];
+    const prevKey=i>0?retKeys[i-1]:null;
+    const wDyn=prevKey?getAllocForKey(prevKey):{eq:50,gold:25,debt:25};
+    const wSta={eq:60,gold:25,debt:15};
+    const n250=d.n250_ret/100, gr=d.gold_ret/100, sr=d.gsec_ret/100;
+    const rDyn=(wDyn.eq/100)*n250+(wDyn.gold/100)*gr+(wDyn.debt/100)*sr;
+    const rSta=(wSta.eq/100)*n250+(wSta.gold/100)*gr+(wSta.debt/100)*sr;
+    dynVals.push(dynVals[dynVals.length-1]*(1+rDyn));
+    staVals.push(staVals[staVals.length-1]*(1+rSta));
+    eqVals.push(eqVals[eqVals.length-1]*(1+n250));
+    goldVals.push(goldVals[goldVals.length-1]*(1+gr));
+    debtVals.push(debtVals[debtVals.length-1]*(1+sr));
+    dynRets.push(rDyn); staRets.push(rSta); eqRets.push(n250); goldRets.push(gr); debtRets.push(sr);
+    const[y,m]=k.split('-');labels.push(MONTHS[+m-1].slice(0,3)+' '+y);
+  }
+  return{
+    dynVals:dynVals.slice(1), staVals:staVals.slice(1),
+    eqVals:eqVals.slice(1),   goldVals:goldVals.slice(1), debtVals:debtVals.slice(1),
+    labels, dynRets, staRets, eqRets, goldRets, debtRets
+  };
+}
+
+function calcMetrics(rets){
+  const n=rets.length; if(n<2)return{};
+  const years=n/12;
+  const total=rets.reduce((a,r)=>a*(1+r),1)-1;
+  const cagr=Math.pow(1+total,1/years)-1;
+  const mean=rets.reduce((a,b)=>a+b,0)/n;
+  const variance=rets.reduce((a,r)=>a+Math.pow(r-mean,2),0)/(n-1);
+  const vol=Math.sqrt(variance*12);
+  const rf=0.06;
+  const sharpe=(cagr-rf)/vol;
+  const downRets=rets.filter(r=>r<0);
+  const dVar=downRets.length?downRets.reduce((a,r)=>a+r*r,0)/downRets.length:0.0001;
+  const sortino=(cagr-rf)/Math.sqrt(dVar*12);
+  let peak=1,val=1,maxDD=0;
+  rets.forEach(r=>{val*=(1+r);if(val>peak)peak=val;const dd=(peak-val)/peak;if(dd>maxDD)maxDD=dd;});
+  const best=Math.max(...rets),worst=Math.min(...rets);
+  const pctPos=rets.filter(r=>r>0).length/n*100;
+  const calmar=maxDD>0?cagr/maxDD:0;
+  return{cagr,vol,sharpe,sortino,maxDD,best,worst,pctPos,calmar,total,n};
+}
+
+// ── Backtest chart ────────────────────────────────────────────────────────────
+let btChart=null, ddChart=null;
+
+function drawdownSeries(vals){
+  let peak=vals[0]; const dd=[];
+  for(const v of vals){
+    if(v>peak) peak=v;
+    dd.push(+((v/peak-1)*100).toFixed(2));
+  }
+  return dd;
+}
+
+function updateBacktest(){
+  const bt=runBacktest();
+  if(!bt){document.getElementById('metrics-body').innerHTML='<tr><td colspan="5" style="color:var(--t3);font-style:italic;padding:20px">Not enough data. Ensure n250_ret, gold_ret, gsec_ret are populated.</td></tr>';return;}
+
+  const{dynVals,staVals,eqVals,goldVals,debtVals,labels,dynRets,staRets,eqRets,goldRets,debtRets}=bt;
+
+  // ── Portfolio growth chart ──
+  const ctx1=document.getElementById('btChart').getContext('2d');
+  if(btChart)btChart.destroy();
+  btChart=new Chart(ctx1,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Dynamic',        data:dynVals.map(v=>+v.toFixed(2)),  borderColor:'#7c6af7',borderWidth:2.5,backgroundColor:'rgba(124,106,247,0.06)',fill:true, tension:0.3,pointRadius:0,pointHoverRadius:4},
+      {label:'Static 60/25/15',data:staVals.map(v=>+v.toFixed(2)),  borderColor:'#e2e8f0',borderWidth:1.8,backgroundColor:'transparent',            fill:false,tension:0.3,pointRadius:0,pointHoverRadius:4},
+      {label:'100% Equity',    data:eqVals.map(v=>+v.toFixed(2)),    borderColor:'#f87171',borderWidth:1.5,backgroundColor:'transparent',            fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+      {label:'100% Gold',      data:goldVals.map(v=>+v.toFixed(2)),  borderColor:'#fbbf24',borderWidth:1.5,backgroundColor:'transparent',            fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+      {label:'100% GSec',      data:debtVals.map(v=>+v.toFixed(2)),  borderColor:'#2dd4bf',borderWidth:1.5,backgroundColor:'transparent',            fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:10},maxTicksLimit:10}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:10},callback:v=>'₹'+v.toFixed(0)}}
+      },
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2030',borderColor:'#242c3d',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:10,cornerRadius:8,
+        callbacks:{label:c=>' '+c.dataset.label+': ₹'+c.raw.toFixed(1)}
+      }}
+    }
+  });
+
+  // ── Drawdown chart ──
+  const ddDyn  = drawdownSeries(dynVals);
+  const ddSta  = drawdownSeries(staVals);
+  const ddEq   = drawdownSeries(eqVals);
+  const ddGold = drawdownSeries(goldVals);
+  const ddDebt = drawdownSeries(debtVals);
+
+  const ctx2=document.getElementById('ddChart').getContext('2d');
+  if(ddChart)ddChart.destroy();
+  ddChart=new Chart(ctx2,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Dynamic',        data:ddDyn,  borderColor:'#7c6af7',borderWidth:2,backgroundColor:'rgba(124,106,247,0.08)',fill:true, tension:0.3,pointRadius:0,pointHoverRadius:4},
+      {label:'Static 60/25/15',data:ddSta,  borderColor:'#e2e8f0',borderWidth:1.5,backgroundColor:'transparent',          fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+      {label:'100% Equity',    data:ddEq,   borderColor:'#f87171',borderWidth:1.5,backgroundColor:'transparent',          fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+      {label:'100% Gold',      data:ddGold, borderColor:'#fbbf24',borderWidth:1.5,backgroundColor:'transparent',          fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+      {label:'100% GSec',      data:ddDebt, borderColor:'#2dd4bf',borderWidth:1.5,backgroundColor:'transparent',          fill:false,tension:0.3,pointRadius:0,pointHoverRadius:3},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:10},maxTicksLimit:10}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},max:0,
+           ticks:{color:'#475569',font:{family:"'IBM Plex Mono'",size:10},callback:v=>v.toFixed(0)+'%'}}
+      },
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2030',borderColor:'#242c3d',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:10,cornerRadius:8,
+        callbacks:{label:c=>' '+c.dataset.label+': '+c.raw.toFixed(1)+'%'}
+      }}
+    }
+  });
+
+  // Metrics — 5 columns: metric, dynamic, static, 100% equity, 100% gold, 100% gsec
+  const dm=calcMetrics(dynRets), sm=calcMetrics(staRets);
+  const em=calcMetrics(eqRets),  gm=calcMetrics(goldRets), dm2=calcMetrics(debtRets);
+  const f=(v,dec=1)=>isFinite(v)?v.toFixed(dec):'—';
+  const pct=(v)=>isFinite(v)?(v*100).toFixed(1)+'%':'—';
+  const hib=[true,true,false,true,true,false,true,true,true,true];
+
+  // For "better" highlighting, compare only dynamic vs static
+  const isBetter=(i,dv,sv)=>hib[i]?dv>sv:dv<sv;
+
+  const rows=[
+    ['Total Return',         dm.total,  sm.total,  em.total,  gm.total,  dm2.total,  v=>(v*100).toFixed(1)+'%'],
+    ['CAGR',                 dm.cagr,   sm.cagr,   em.cagr,   gm.cagr,   dm2.cagr,   v=>(v*100).toFixed(1)+'%'],
+    ['Ann. Volatility',      dm.vol,    sm.vol,    em.vol,    gm.vol,    dm2.vol,    v=>(v*100).toFixed(1)+'%'],
+    ['Sharpe Ratio',         dm.sharpe, sm.sharpe, em.sharpe, gm.sharpe, dm2.sharpe, v=>f(v,2)],
+    ['Sortino Ratio',        dm.sortino,sm.sortino,em.sortino,gm.sortino,dm2.sortino,v=>f(v,2)],
+    ['Max Drawdown',         dm.maxDD,  sm.maxDD,  em.maxDD,  gm.maxDD,  dm2.maxDD,  v=>'-'+(v*100).toFixed(1)+'%'],
+    ['Best Month',           dm.best,   sm.best,   em.best,   gm.best,   dm2.best,   v=>'+'+(v*100).toFixed(1)+'%'],
+    ['Worst Month',          dm.worst,  sm.worst,  em.worst,  gm.worst,  dm2.worst,  v=>(v*100).toFixed(1)+'%'],
+    ['% Positive Months',    dm.pctPos, sm.pctPos, em.pctPos, gm.pctPos, dm2.pctPos, v=>f(v,0)+'%'],
+    ['Calmar Ratio',         dm.calmar, sm.calmar, em.calmar, gm.calmar, dm2.calmar, v=>f(v,2)],
+  ];
+
+  document.getElementById('metrics-body').innerHTML=rows.map((r,i)=>{
+    // r = [label, dyn, sta, eq, gold, debt, fmtFn]
+    const fmt=r[6], dv=r[1], sv=r[2];
+    const dWin=isFinite(dv)&&isFinite(sv)&&isBetter(i,dv,sv);
+    const sWin=isFinite(dv)&&isFinite(sv)&&isBetter(i,sv,dv);
+    const dc=dWin?'better':''; const sc=sWin?'better':'';
+    const dt=dWin?`<span class="winner-tag wt-dyn">▲</span>`:'';
+    const st=sWin?`<span class="winner-tag wt-sta">▲</span>`:'';
+    const cols=[r[1],r[2],r[3],r[4],r[5]].map((v,ci)=>{
+      const cls=ci===0?dc:ci===1?sc:''; const tag=ci===0?dt:ci===1?st:'';
+      return`<td class="${cls}" style="text-align:right;font-family:var(--mono);font-size:12px;font-weight:500;padding:9px 16px;border-bottom:1px solid var(--border)">${isFinite(v)?fmt(v):'—'}${tag}</td>`;
+    });
+    return`<tr><td style="color:var(--t2);padding:9px 20px;border-bottom:1px solid var(--border)">${r[0]}</td>${cols.join('')}</tr>`;
+  }).join('');
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(id,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.main').forEach(m=>m.classList.remove('visible'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('visible');
+  if(id==='backtest')updateBacktest();
+}
+
+// ── History pills ────────────────────────────────────────────────────────────
+function buildPills(){
+  const s=document.getElementById('hstrip');
+  s.innerHTML='<span class="hl">Data available:</span>';
+  const ks=sortedKeys();
+  if(!ks.length){s.innerHTML+='<span style="font-size:10px;color:var(--t3);font-style:italic">No data yet</span>';return;}
+  ks.forEach(k=>{const[y,m]=k.split('-');const p=document.createElement('div');p.className='hpill';p.textContent=MONTHS[+m-1].slice(0,3)+' '+y;p.dataset.key=k;p.onclick=()=>{document.getElementById('sel-month').value=m;document.getElementById('sel-year').value=y;loadPeriod();};s.appendChild(p);});
+}
+
+// ── Future mode ──────────────────────────────────────────────────────────────
+let futureMode = false;
+
+function toggleFuture(){
+  futureMode = !futureMode;
+  applyLockState();
+  if(futureMode){
+    // In future mode: clear month/year selectors visually, show "Future" in output period
+    document.getElementById('out-period').textContent = 'Future / What-If';
+    document.getElementById('dstatus').className = 'dstatus ds-ok';
+    document.getElementById('dstatus-txt').textContent = 'Future mode';
+    document.getElementById('ndo').classList.remove('vis');
+    update();
+  } else {
+    loadPeriod();
+  }
+}
+
+function applyLockState(){
+  const btn    = document.getElementById('future-btn');
+  const grid   = document.getElementById('signals-grid');
+  const banner = document.getElementById('lock-banner');
+  const monthSel = document.getElementById('sel-month');
+  const yearSel  = document.getElementById('sel-year');
+  const navBtns  = document.querySelectorAll('.nbtn');
+
+  if(futureMode){
+    btn.classList.add('active');
+    btn.textContent = '← Historical';
+    grid.classList.remove('signals-locked');
+    banner.classList.remove('visible');
+    monthSel.disabled = true;
+    yearSel.disabled  = true;
+    navBtns.forEach(b=>b.disabled=true);
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Future ✦';
+    const hasData = !!DATA[getKey()];
+    if(hasData){
+      grid.classList.add('signals-locked');
+      banner.classList.add('visible');
+    } else {
+      grid.classList.remove('signals-locked');
+      banner.classList.remove('visible');
+    }
+    monthSel.disabled = false;
+    yearSel.disabled  = false;
+    navBtns.forEach(b=>b.disabled=false);
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+const ys=document.getElementById('sel-year');
+const cy=new Date().getFullYear();
+for(let y=2015;y<=cy+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===cy)o.selected=true;ys.appendChild(o);}
+document.getElementById('sel-month').value=String(new Date().getMonth()+1).padStart(2,'0');
+document.getElementById('sel-month').addEventListener('change',loadPeriod);
+document.getElementById('sel-year').addEventListener('change',loadPeriod);
+document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input',()=>{if(futureMode||!DATA[getKey()])update();}));
+buildPills();
+loadPeriod();
+</script>
+</body>
+</html>
