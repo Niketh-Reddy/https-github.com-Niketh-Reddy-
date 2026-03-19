@@ -1,5 +1,5 @@
 --
-# Multi-Asset Signal Allocation Engine
+# Dynamic-Multi-Asset Signal Allocation Engine
  
 A quantitative, signal-driven allocation engine for Indian passive
 investors. Dynamically allocates across three passive index
