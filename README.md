@@ -5,7 +5,7 @@ A quantitative, signal-driven allocation engine for Indian passive
 investors. Dynamically allocates across three passive index
 instruments using 8 auto-computed signals derived from public data.
  
-**Live tool: [Open Allocation Engine](https://niketh-reddy.github.io/)**
+**Live tool: [Open Allocation Engine](https://niketh-reddy.github.io/Dynamic-Multi-Asset-Allocation-Tool/)**
  
 ## Three Instruments
 - Nifty LargeMidcap 250 TRI Index Fund (equity)
