@@ -188,7 +188,7 @@ select.isel{width:100%;background:var(--s2);border:1px solid var(--border2);colo
 <div class="hdr">
   <div class="badge">PASSIVE INDEX ALLOCATION ENGINE · v5</div>
   <h1>Multi-Asset Signal Calculator</h1>
-  <p>7 raw inputs per month · EPS auto-computed from n500_close ÷ n500_pe · 8 signals total · Data: Jan 2016 – Feb 2026</p>
+  <p>7 raw inputs per month · EPS auto-computed from n500_close ÷ n500_pe · 8 signals total · Data: Jan 2016 – Mar 2026</p>
 </div>
 
 <!-- Month bar -->
@@ -357,7 +357,7 @@ select.isel{width:100%;background:var(--s2);border:1px solid var(--border2);colo
 <!-- ══════ TAB 2: BACKTEST ══════ -->
 <div class="main" id="tab-backtest">
   <div class="data-note" style="background:rgba(45,212,191,.06);border-color:rgba(45,212,191,.2);color:var(--debt)">
-    ✓ Real data: Jan 2016 – Feb 2026 · 122 months · Nifty 10yr Benchmark G-Sec Index · All series complete.
+    ✓ Real data: Jan 2016 – Mar 2026 · 123 months · Nifty 10yr Benchmark G-Sec Index · All series complete.
   </div>
   <div class="bt-grid">
     <!-- Chart -->
@@ -576,6 +576,7 @@ const DATA = {
   "2025-12":{ n500_pe:24.45, n500_close:23871.55, n250_close:21868.98, gsec_10yr:6.588, cpi:1.33, gold_nav:110.11, usdinr:89.8710, n250_ret:-0.36, gold_ret:5.25, gsec_ret:-0.12 },
   "2026-01":{ n500_pe:23.48, n500_close:23079.50, n250_close:21169.33, gsec_10yr:6.695, cpi:4.26, gold_nav:131.12, usdinr:91.6940, n250_ret:-3.20, gold_ret:19.08, gsec_ret:-0.14 },
   "2026-02":{ n500_pe:23.50, n500_close:23166.85, n250_close:21363.06, gsec_10yr:6.661, cpi:3.61, gold_nav:131.60, usdinr:91.0760, n250_ret:0.92, gold_ret:0.37, gsec_ret:0.72 },
+  "2026-03":{ n500_pe:21.24, n500_close:20528.05, n250_close:18939.96, gsec_10yr:6.961, cpi:3.21, gold_nav:121.19, usdinr:93.485, n250_ret:-11.34, gold_ret:-7.91, gsec_ret:-1.8 },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -1080,8 +1081,8 @@ function applyLockState(){
 // ── Init ─────────────────────────────────────────────────────────────────────
 const ys=document.getElementById('sel-year');
 const cy=new Date().getFullYear();
-for(let y=2015;y<=cy+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===cy)o.selected=true;ys.appendChild(o);}
-document.getElementById('sel-month').value=String(new Date().getMonth()+1).padStart(2,'0');
+for(let y=2015;y<=cy+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===2026)o.selected=true;ys.appendChild(o);}
+document.getElementById('sel-month').value='03';
 document.getElementById('sel-month').addEventListener('change',loadPeriod);
 document.getElementById('sel-year').addEventListener('change',loadPeriod);
 document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input',()=>{if(futureMode||!DATA[getKey()])update();}));
